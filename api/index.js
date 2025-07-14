@@ -22,7 +22,7 @@ export default async function handler(req, res) {
         if (req.method === 'POST') {
             const { payload } = req.body;
             const createUrl = `${REAL_WEBHOOK_URL}?wait=true`; 
-            const response = await fetch(REAL_WEBHOOK_URL, {
+            const response = await fetch(createUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' },
                 body: JSON.stringify(payload)
