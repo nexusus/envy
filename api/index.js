@@ -21,13 +21,19 @@ export default async function handler(req, res) {
     try {
         if (req.method === 'POST') {
             const { payload } = req.body;
+            const createUrl = `${REAL_WEBHOOK_URL}?wait=true`; 
             const response = await fetch(REAL_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' },
                 body: JSON.stringify(payload)
             });
 
-            if (!response.ok) throw new Error(`Discord API Error: ${response.status}`);
+            if (!response.ok) {
+                // Log the error text from Discord if something went wrong
+                const errorText = await response.text();
+                console.error("Discord API Error on POST:", errorText);
+                throw new Error(`Discord API Error: ${response.status}`);
+            }
             const responseData = await response.json();
             return res.status(200).json({ messageId: responseData.id });
 
