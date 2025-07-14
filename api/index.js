@@ -1,59 +1,38 @@
-// This function will handle ALL requests (POST, PATCH, GET, etc.)
+import { Redis } from '@upstash/redis';
+
 export default async function handler(req, res) {
-    // --- SECURITY & CONFIG ---
+    const redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
 
-    // Immediately reject anything that isn't a POST or PATCH
-    if (req.method !== 'POST' && req.method !== 'PATCH') {
-        return res.status(405).send('Method Not Allowed');
-    }
+    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
+    if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
 
-    // --- Security Checks ---
-    if (req.headers['x-secret-header'] !== SECRET_HEADER) {
-        return res.status(401).send('Unauthorized');
-    }
-    //if (!req.body.jobId) {
-    //    return res.status(400).send('Bad Request: Missing JobId.');
-    //}
+    const { gameId, payload } = req.body;
+    if (!gameId) return res.status(400).send('Bad Request: Missing GameId.');
 
-    // --- Logic ---
     try {
-        if (req.method === 'POST') {
-            const { payload } = req.body;
-            const createUrl = `${REAL_WEBHOOK_URL}?wait=true`; 
-            const response = await fetch(createUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' },
-                body: JSON.stringify(payload)
-            });
+        let messageId = await redis.get(`game:${gameId}`);
+        const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Vercel-Roblox-Proxy' };
 
-            if (!response.ok) {
-                // Log the error text from Discord if something went wrong
-                const errorText = await response.text();
-                console.error("Discord API Error on POST:", errorText);
-                throw new Error(`Discord API Error: ${response.status}`);
-            }
-            const responseData = await response.json();
-            return res.status(200).json({ messageId: responseData.id });
-
-        } else if (req.method === 'PATCH') {
-            // LOGIC TO EDIT AN EXISTING MESSAGE
-            const { messageId, payload } = req.body;
-            if (!messageId) return res.status(400).send('Bad Request: Missing messageId.');
-            
+        if (!messageId) {
+            const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
+            const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+            if (!createResponse.ok) throw new Error(`Discord API Error on POST: ${createResponse.status}`);
+            const responseData = await createResponse.json();
+            messageId = responseData.id;
+            await redis.set(`game:${gameId}`, messageId);
+        } else {
             const editUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
-            const response = await fetch(editUrl, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) throw new Error(`Discord API Error: ${response.status}`);
-            return res.status(200).send('OK');
+            await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(payload) });
         }
+        return res.status(200).json({ messageId: messageId });
     } catch (error) {
         console.error("Serverless Function Error:", error);
-        return res.status(500).send('Internal Server Error');
+        return res.status(500).send(`Internal Server Error: ${error.message}`);
     }
 }
