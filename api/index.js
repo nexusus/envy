@@ -52,7 +52,7 @@ export default async function handler(req, res) {
    const authCacheKey = `auth:${jobId}`;
     const isAlreadyAuthenticated = await redis.get(authCacheKey);
 
-    if (!isAlreadyAuthenticated && jobId !== 'studio-test') {
+    if (!isAlreadyAuthenticated) {
         // If not in cache, perform the expensive check
         console.log(`JobId ${jobId} not in cache. Performing live authentication...`);
         const isAuthentic = await isJobIdAuthentic(placeId, jobId);
