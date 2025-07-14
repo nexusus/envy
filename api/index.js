@@ -13,9 +13,9 @@ export default async function handler(req, res) {
     if (req.headers['x-secret-header'] !== SECRET_HEADER) {
         return res.status(401).send('Unauthorized');
     }
-    if (!req.body.jobId) {
-        return res.status(400).send('Bad Request: Missing JobId.');
-    }
+    //if (!req.body.jobId) {
+    //    return res.status(400).send('Bad Request: Missing JobId.');
+    //}
 
     // --- Logic ---
     try {
