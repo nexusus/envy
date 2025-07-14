@@ -8,13 +8,73 @@ export default async function handler(req, res) {
 
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
-
+    const AUTH_CACHE_EXPIRATION_SECONDS = 300; // 5 minutes
+    
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
     if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
 
-    const { gameId, payload } = req.body;
-    if (!gameId) return res.status(400).send('Bad Request: Missing GameId.');
+    async function isJobIdAuthentic(placeId, targetJobId) {
+    // Use roproxy to avoid Roblox's own rate limits on their API
+    const apiUrl = `https://presence.roproxy.com/v1/presence/games`;
+    try {
+        const apiResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ placeIds: [placeId] })
+        });
 
+        if (!apiResponse.ok) {
+            console.error(`Roblox Presence API returned an error: ${apiResponse.status}`);
+            return false; // Fail safely if the API is down
+        }
+
+        const data = await apiResponse.json();
+        const gamePresence = data.gamePresence[0];
+
+        if (!gamePresence || !gamePresence.serverInstances) {
+            return false; // No servers running for this placeId
+        }
+
+        // Search the list of active servers for a matching JobId
+        return gamePresence.serverInstances.some(instance => instance.id.toLowerCase() === targetJobId.toLowerCase());
+
+    } catch (error) {
+        console.error("Error during JobId authentication:", error);
+        return false; // Fail safely on any exception
+    }
+}
+
+    const { gameId, placeId, jobId, payload } = req.body;
+    if (!gameId || !placeId || !jobId) {
+        return res.status(400).send('Bad Request: Missing required IDs.');
+    }
+
+   const authCacheKey = `auth:${jobId}`;
+    const isAlreadyAuthenticated = await redis.get(authCacheKey);
+
+    if (!isAlreadyAuthenticated && jobId !== 'studio-test') {
+        // If not in cache, perform the expensive check
+        console.log(`JobId ${jobId} not in cache. Performing live authentication...`);
+        const isAuthentic = await isJobIdAuthentic(placeId, jobId);
+
+        if (!isAuthentic) {
+            console.warn(`Rejected unauthenticated JobId: ${jobId}`);
+            return res.status(403).send('Forbidden: JobId authentication failed.');
+        }
+        // If authentic, save to cache with a 5-minute expiration
+        await redis.set(authCacheKey, 'true', { ex: AUTH_CACHE_EXPIRATION_SECONDS });
+    }
+
+    // Rate limit every request, even cached ones
+    const rateLimitKey = `rate:${jobId}`;
+    const currentRequests = await redis.incr(rateLimitKey);
+    if (currentRequests === 1) {
+        await redis.expire(rateLimitKey, 60);
+    }
+    if (currentRequests > 20) {
+        return res.status(429).send('Too Many Requests');
+    }
+    
     try {
         let messageId = await redis.get(`game:${gameId}`);
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
