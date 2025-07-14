@@ -2,8 +2,8 @@ import { Redis } from '@upstash/redis';
 
 export default async function handler(req, res) {
     const redis = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        url: process.env.KV_REST_API_URL,
+        token: process.env.KV_REST_API_TOKEN,
     });
 
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
     try {
         let messageId = await redis.get(`game:${gameId}`);
-        const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Vercel-Roblox-Proxy' };
+        const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
         if (!messageId) {
             const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
