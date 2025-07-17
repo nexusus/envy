@@ -2,16 +2,9 @@
   "version": 2,
   "builds": [
     { "src": "api/index.js", "use": "@vercel/node" },
-    { "src": "api/cleanup.js", "use": "@vercel/node" }
   ],
   "routes": [
-    { "src": "/cleanup", "dest": "/api/cleanup.js" },
     { "src": "/(.*)", "dest": "/api/index.js" }
   ],
-  "crons": [
-    {
-      "path": "/api/cleanup",
-      "schedule": "0 * * * *" 
-    }
   ]
 }
