@@ -2,7 +2,6 @@ import { Redis } from '@upstash/redis';
 
 
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
-    console.log("Cleanup check triggered...");
     const STALE_GAME_SECONDS = 2 * 60 * 60; // Clean up if two hours passed without a game update.
     const currentTime = Math.floor(Date.now() / 1000);
     let deletedCount = 0;
