@@ -9,6 +9,7 @@ export default async function handler(req, res) {
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
     const AUTH_CACHE_EXPIRATION_SECONDS = 300; // 5 minutes
+    const STALE_GAME_SECONDS = 2 * 60 * 60;
     
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
     if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
@@ -67,7 +68,13 @@ export default async function handler(req, res) {
     if (currentRequests > 20) return res.status(429).send('Too Many Requests');
     
     try {
-        let messageId = await redis.get(`game:${gameId}`);
+        const gameKey = `game:${gameId}`;
+        let gameData = await redis.get(gameKey);
+        let messageId = gameData ? gameData.messageId : null;
+        const currentTime = Math.floor(Date.now() / 1000);
+
+        
+        
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
         if (!messageId) {
@@ -76,11 +83,14 @@ export default async function handler(req, res) {
             if (!createResponse.ok) throw new Error(`Discord API Error on POST: ${createResponse.status}`);
             const responseData = await createResponse.json();
             messageId = responseData.id;
-            await redis.set(`game:${gameId}`, messageId);
         } else {
             const editUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
             await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(payload) });
         }
+        
+        const newGameData = { messageId: messageId, timestamp: currentTime };
+        await redis.set(gameKey, newGameData);
+        
         return res.status(200).json({ messageId: messageId });
     } catch (error) {
         console.error("Serverless Function Error:", error);
