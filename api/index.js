@@ -1,15 +1,46 @@
 import { Redis } from '@upstash/redis';
 
+
+async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
+    console.log("Cleanup check triggered...");
+    const STALE_GAME_SECONDS = 2 * 60 * 60; // Clean up if two hours passed without a game update.
+    const currentTime = Math.floor(Date.now() / 1000);
+    let deletedCount = 0;
+    
+    try {
+        
+        const gameKeys = await redis.keys('game:*');
+        if (gameKeys.length === 0) return;
+    
+        const gameDataArray = await redis.mget(...gameKeys);
+    
+        for (let i = 0; i < gameKeys.length; i++) {
+            const key = gameKeys[i];
+            const data = gameDataArray[i];
+    
+            if (data && data.timestamp && (currentTime - data.timestamp > STALE_GAME_SECONDS)) {
+                console.log(`Cleanup: Found stale game ${key}. Deleting...`);
+                const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${data.messageId}`;
+                fetch(deleteUrl, { method: 'DELETE' }); // Fire and forget
+                await redis.del(key);
+                deletedCount++;
+            }
+        }
+        if (deletedCount > 0) console.log(`Cleanup complete. Deleted ${deletedCount} stale game(s).`);
+    } catch (error) {
+        console.error("Background Cleanup Error:", error);
+    }
+}
 export default async function handler(req, res) {
-    const redis = new Redis({
+    const redis = new Redis({ 
         url: process.env.KV_REST_API_URL,
         token: process.env.KV_REST_API_TOKEN,
     });
-
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
     const AUTH_CACHE_EXPIRATION_SECONDS = 300; // 5 minutes
-    const STALE_GAME_SECONDS = 2 * 60 * 60;
+    
+    
     
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
     if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
@@ -66,7 +97,8 @@ export default async function handler(req, res) {
     const currentRequests = await redis.incr(rateLimitKey);
     if (currentRequests === 1) await redis.expire(rateLimitKey, 60);
     if (currentRequests > 20) return res.status(429).send('Too Many Requests');
-    
+
+   
     try {
         const gameKey = `game:${gameId}`;
         let gameData = await redis.get(gameKey);
@@ -91,9 +123,13 @@ export default async function handler(req, res) {
         const newGameData = { messageId: messageId, timestamp: currentTime };
         await redis.set(gameKey, newGameData);
         
-        return res.status(200).json({ messageId: messageId });
+        res.status(200).json({ messageId: messageId });
+        cleanupStaleGames(redis, REAL_WEBHOOK_URL);
     } catch (error) {
-        console.error("Serverless Function Error:", error);
-        return res.status(500).send(`Internal Server Error: ${error.message}`);
+        console.error("Main Handler Error:", error);
+        // Check if a response has already been sent before sending another one
+        if (!res.headersSent) {
+            return res.status(500).send(`Internal Server Error: ${error.message}`);
+        }
     }
 }
