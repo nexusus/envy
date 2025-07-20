@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis';
+const { Redis } = require('@upstash/redis');
 
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
     const STALE_GAME_SECONDS = 2 * 60 * 60; // Clean up if two hours passed without a game update.
@@ -210,7 +210,7 @@ function createDiscordEmbed(gameInfo, placeId, playerCount, thumbnail) {
     };
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     const redis = new Redis({ 
         url: process.env.KV_REST_API_URL,
         token: process.env.KV_REST_API_TOKEN,
@@ -330,4 +330,4 @@ export default async function handler(req, res) {
             return res.status(500).send(`Internal Server Error: ${error.message}`);
         }
     }
-}
+};
