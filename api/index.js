@@ -18,7 +18,7 @@ async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
             if (data && data.timestamp && (currentTime - data.timestamp > STALE_GAME_SECONDS)) {
                 console.log(`Cleanup: Found stale game ${key}. Deleting...`);
                 const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${data.messageId}`;
-                fetch(deleteUrl, { method: 'DELETE' }); // Fire and forget
+                fetch(deleteUrl, { method: 'DELETE' }).catch(e => {console.log(`Failed to delete message ${data.messageId}:`, e)}); // Fire and forget
                 await redis.del(key);
                 deletedCount++;
             }
@@ -118,42 +118,6 @@ function formatDate(dateString) {
     }
 }
 
-function formatDate(dateString) {
-    try {
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffMs = now - date;
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
-
-        // Format absolute date
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const year = date.getFullYear();
-        const absoluteDate = `${month}/${day}/${year}`;
-
-        // Format relative time
-        let relativeTime;
-        if (diffMinutes < 60) {
-            relativeTime = `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
-        } else if (diffHours < 24) {
-            relativeTime = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-        } else if (diffDays < 30) {
-            relativeTime = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-        } else if (diffDays < 365) {
-            const months = Math.floor(diffDays / 30);
-            relativeTime = `${months} month${months !== 1 ? 's' : ''} ago`;
-        } else {
-            const years = Math.floor(diffDays / 365);
-            relativeTime = `${years} year${years !== 1 ? 's' : ''} ago`;
-        }
-
-        return `${relativeTime} (${absoluteDate})`;
-    } catch (e) {
-        return "Unknown";
-    }
-}
 
 function createDiscordEmbed(gameInfo, placeId, thumbnail, isNonHttp = false) {
     let creator = "";
@@ -302,6 +266,17 @@ module.exports = async function handler(req, res) {
         let gameData = await redis.get(gameKey);
         let messageId = gameData ? gameData.messageId : null;
         const currentTime = Math.floor(Date.now() / 1000);
+        if (gameInfo.playing === 0) {
+            
+            if (messageId) {
+                
+                // Delete existing message if players = 0
+                const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
+                await fetch(deleteUrl, { method: 'DELETE' });
+                await redis.del(gameKey);
+            }
+            return res.status(200).json({ success: true, action: 'skipped_empty_game' });
+        }
 
         // Create Discord embed
         const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, isNonHttp);
