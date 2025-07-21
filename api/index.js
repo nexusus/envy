@@ -155,7 +155,7 @@ function formatDate(dateString) {
     }
 }
 
-function createDiscordEmbed(gameInfo, placeId, playerCount, thumbnail) {
+function createDiscordEmbed(gameInfo, placeId, thumbnail, isNonHttp = false) {
     let creator = "";
     if (gameInfo.creator.type === "User") {
         creator = `**Owner**: [${gameInfo.creator.name}](https://www.roblox.com/users/${gameInfo.creator.id || 0}/profile)\n` +
@@ -182,12 +182,13 @@ function createDiscordEmbed(gameInfo, placeId, playerCount, thumbnail) {
                 {
                     name: "> **Game Information**",
                     value: `**Players**: \`${gameInfo.playing}\`\n` +
-                           `**Server Size**: \`${gameInfo.maxPlayers || playerCount || "Unknown"}\`\n` +
+                           `**Server Size**: \`${gameInfo.maxPlayers || "Unknown"}\`\n` +
                            `**Visits**: \`${formatNumber(gameInfo.visits)}\`\n` +
                            `**Favorites**: \`${formatNumber(gameInfo.favoritedCount)}\`\n` +
                            `**Genre**: \`${gameInfo.genre}\`\n` +
                            `**Description**: ${gameInfo.description || "No description"}\n` +
-                           `**Last Game Update**: \`${formatDate(gameInfo.updated)}\``,
+                           `**Last Game Update**: \`${formatDate(gameInfo.updated)}\`` + (isNonHttp ?  
+                           `\n**WARNING**: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
                     inline: true
                 },
                 {
@@ -221,27 +222,33 @@ module.exports = async function handler(req, res) {
     
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
     if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
+    let placeId, isNonHttp = false;
 
-    // Extract Place ID from Roblox-Id header
-    const robloxIdHeader = req.headers['roblox-id'];
-    if (!robloxIdHeader) {
-        return res.status(400).send('Bad Request: Missing Roblox-Id header.');
+    if (req.body && req.body.fromNonHttp) {
+        isNonHttp = true;
+        placeId = req.body.placeId;
+    } else{
+
+        // Extract Place ID from Roblox-Id header
+        const robloxIdHeader = req.headers['roblox-id'];
+        if (!robloxIdHeader) {
+            return res.status(400).send('Bad Request: Missing Roblox-Id header.');
+        }
+
+        // Parse Place ID from header (format might be "placeId=123456" or just "123456")
+        
+        const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
+        if (placeIdMatch) {
+            placeId = placeIdMatch[1];
+        } else if (/^\d+$/.test(robloxIdHeader)) {
+            placeId = robloxIdHeader;
+        } else {
+            return res.status(400).send('Bad Request: Invalid Roblox-Id header format.');
+        }
     }
-
-    // Parse Place ID from header (format might be "placeId=123456" or just "123456")
-    let placeId;
-    const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
-    if (placeIdMatch) {
-        placeId = placeIdMatch[1];
-    } else if (/^\d+$/.test(robloxIdHeader)) {
-        placeId = robloxIdHeader;
-    } else {
-        return res.status(400).send('Bad Request: Invalid Roblox-Id header format.');
-    }
-
-    const { jobId, playerCount } = req.body;
-    if (!jobId) {
-        return res.status(400).send('Bad Request: Missing jobId.');
+    const jobId = req.body.jobId;
+    if (!jobId || !placeId) {
+        return res.status(400).send('Bad Request: Missing required data.');
     }
 
     // Verify JobId authenticity
@@ -296,7 +303,7 @@ module.exports = async function handler(req, res) {
         const currentTime = Math.floor(Date.now() / 1000);
 
         // Create Discord embed
-        const payload = createDiscordEmbed(gameInfo, placeId, playerCount, thumbnail);
+        const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, isNonHttp);
         
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
