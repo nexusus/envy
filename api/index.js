@@ -213,6 +213,7 @@ module.exports = async function handler(req, res) {
     const jobId = req.body.jobId;
     if (!jobId || !placeId) {
         console.log("sus required data miss...");
+        console.log(`jobId: ${jobId}\n placeId: ${placeId}\n isNonHttp: ${isNonHttp}`);
         return res.status(400).send('Bad Request: Missing required data.');
     }
 
