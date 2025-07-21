@@ -1,7 +1,7 @@
 const { Redis } = require('@upstash/redis');
 
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
-    const STALE_GAME_SECONDS = 2 * 60 * 60; // Clean up if two hours passed without a game update.
+    const STALE_GAME_SECONDS = 30 * 60; // Clean up if half an hour passed without a game update.
     const currentTime = Math.floor(Date.now() / 1000);
     let deletedCount = 0;
     
@@ -248,6 +248,7 @@ module.exports = async function handler(req, res) {
     }
     const jobId = req.body.jobId;
     if (!jobId || !placeId) {
+        console.log("sus required data miss...");
         return res.status(400).send('Bad Request: Missing required data.');
     }
 
@@ -308,6 +309,7 @@ module.exports = async function handler(req, res) {
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
         if (!messageId) {
+            // todo: check if gameInfo.playing = 0 then don't send a message. 
             const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
             const createResponse = await fetch(createUrl, { 
                 method: 'POST', 
@@ -318,6 +320,7 @@ module.exports = async function handler(req, res) {
             const responseData = await createResponse.json();
             messageId = responseData.id;
         } else {
+            // Todo: check if players = 0 if so, delete the message don't edit it.
             const editUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
             await fetch(editUrl, { 
                 method: 'PATCH', 
