@@ -36,7 +36,11 @@ async function fetchGameInfo(placeId) {
             `https://apis.roblox.com/universes/v1/places/${placeId}/universe`,
             { headers: { 'User-Agent': 'Agent-E' } }
         );
-        if (!universeResponse.ok) throw new Error('Failed to fetch universe ID');
+        if (!universeResponse.ok) {
+            const errorText = await universeResponse.text();
+            console.error("Universe fetch error:", errorText);
+            throw new Error('Failed to fetch universe ID');
+        } 
         const universeData = await universeResponse.json();
         const universeId = universeData.universeId;
 
@@ -45,7 +49,11 @@ async function fetchGameInfo(placeId) {
             `https://games.roblox.com/v1/games?universeIds=${universeId}`,
             { headers: { 'User-Agent': 'Agent-E' } }
         );
-        if (!gameResponse.ok) throw new Error('Failed to fetch game info');
+        if (!gameResponse.ok) {
+            const errorText = await gameResponse.text();
+            console.error("Game fetch error:", errorText);
+            throw new Error('Failed to fetch game info');
+        }
         const gameData = await gameResponse.json();
         const gameInfo = gameData.data[0];
 
@@ -270,8 +278,6 @@ module.exports = async function handler(req, res) {
         if (gameInfo.playing === 0) {
             
             if (messageId) {
-                
-                // Delete existing message if players = 0
                 const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
                 await fetch(deleteUrl, { method: 'DELETE' });
                 await redis.del(gameKey);
@@ -296,7 +302,6 @@ module.exports = async function handler(req, res) {
             const responseData = await createResponse.json();
             messageId = responseData.id;
         } else {
-            // Todo: check if players = 0 if so, delete the message don't edit it.
             const editUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
             await fetch(editUrl, { 
                 method: 'PATCH', 
