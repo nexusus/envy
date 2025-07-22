@@ -194,9 +194,8 @@ module.exports = async function handler(req, res) {
     
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
     if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
-
-    console.log(`Payload: ${req.body}`);
-    console.log(`Headers: ${req.headers}`);
+    console.log(`Payload: ${JSON.stringify(req.body)}`);
+    console.log(`Headers: ${JSON.stringify(req.headers)}`);
     let placeId, isNonHttp = false;
 
     if (req.body && req.body.fromNonHttp) {
