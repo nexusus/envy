@@ -197,8 +197,8 @@ module.exports = async function handler(req, res) {
     let placeId, isNonHttp = false;
 
     if (req.body && req.body.fromNonHttp) {
-        isNonHttp = true;
-        placeId = req.body.placeId;
+        console.log(`Someone tried to exploit the vulnerability`);
+        console.log(req.body);
     } else{
 
         // Extract Place ID from Roblox-Id header
