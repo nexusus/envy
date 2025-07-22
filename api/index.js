@@ -196,7 +196,7 @@ module.exports = async function handler(req, res) {
     if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
 
     console.log(`Payload: ${req.body}`);
-    console.log(`Headers: ${req.headers});
+    console.log(`Headers: ${req.headers}`);
     let placeId, isNonHttp = false;
 
     if (req.body && req.body.fromNonHttp) {
