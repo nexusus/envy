@@ -194,19 +194,23 @@ module.exports = async function handler(req, res) {
     
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
     if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
+
+    console.log(`Payload: ${req.body}`);
+    console.log(`Headers: ${req.headers});
     let placeId, isNonHttp = false;
 
     if (req.body && req.body.fromNonHttp) {
         console.log(`Someone tried to exploit the vulnerability`);
         console.log(req.body);
+        return;
     } else{
 
         // Extract Place ID from Roblox-Id header
         const robloxIdHeader = req.headers['roblox-id'];
         if (!robloxIdHeader) {
-            return res.status(400).send('Bad Request: Missing Roblox-Id header.');
+            return res.status(400).send('Bad Request');
         }
-
+        
         // Parse Place ID from header (format might be "placeId=123456" or just "123456")
         
         const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
@@ -215,7 +219,7 @@ module.exports = async function handler(req, res) {
         } else if (/^\d+$/.test(robloxIdHeader)) {
             placeId = robloxIdHeader;
         } else {
-            return res.status(400).send('Bad Request: Invalid Roblox-Id header format.');
+            return res.status(400).send('Bad Request:');
         }
     }
     const jobId = req.body.jobId;
