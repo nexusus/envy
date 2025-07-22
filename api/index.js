@@ -279,12 +279,16 @@ module.exports = async function handler(req, res) {
         let gameData = await redis.get(gameKey);
         let messageId = gameData ? gameData.messageId : null;
         const currentTime = Math.floor(Date.now() / 1000);
-        if (gameInfo.playing === 0) {
+        if (gameInfo.playing === 0 || gameInfo.description.has("envy") || gameInfo.description.has("require") || gameInfo.description.has("serverside")) {
             
             if (messageId) {
                 const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
                 await fetch(deleteUrl, { method: 'DELETE' });
                 await redis.del(gameKey);
+            }
+            if(gameInfo.playing !== 0)
+            {
+                console.log(gameInfo.description);
             }
             return res.status(200).json({ success: true, action: 'skipped_empty_game' });
         }
