@@ -314,7 +314,7 @@ module.exports = async function handler(req, res) {
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
         if (!messageId) {
-            // todo: check if gameInfo.playing = 0 then don't send a message. 
+            
             const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
             const createResponse = await fetch(createUrl, { 
                 method: 'POST', 
@@ -325,12 +325,30 @@ module.exports = async function handler(req, res) {
             const responseData = await createResponse.json();
             messageId = responseData.id;
         } else {
+            
             const editUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
-            await fetch(editUrl, { 
+            const editResponse = await fetch(editUrl, { 
                 method: 'PATCH', 
                 headers, 
                 body: JSON.stringify(payload) 
             });
+
+            if(!editResponse.ok)
+            {
+                
+                if (editResponse.status === 404) {
+                    console.log(`Message ${messageId} not found. Recreating it...`);
+                    const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
+                    const createResponse = await fetch(createUrl, { 
+                        method: 'POST', 
+                        headers, 
+                        body: JSON.stringify(payload) 
+            });
+                if (!createResponse.ok) throw new Error(`Discord API Error on recreation POST: ${createResponse.status}`);
+                
+                const newResponseData = await createResponse.json();
+                messageId = newResponseData.id; 
+            }
         }
         
         const newGameData = { messageId: messageId, timestamp: currentTime, placeId: placeId };
