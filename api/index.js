@@ -263,7 +263,8 @@ module.exports = async function handler(req, res) {
             console.warn(`Rejected unauthenticated JobId: ${jobId}`);
             return res.status(403).send('Forbidden: JobId authentication failed.');
         }
-        await redis.set(authCacheKey, 'true', { ex: AUTH_CACHE_EXPIRATION_SECONDS });
+        // await redis.set(authCacheKey, 'true', { ex: AUTH_CACHE_EXPIRATION_SECONDS });
+        await redis.set(authCacheKey, 'true', 'EX', AUTH_CACHE_EXPIRATION_SECONDS);
     }
 
     // Rate limiting
@@ -277,7 +278,10 @@ module.exports = async function handler(req, res) {
         const { gameInfo, universeId, thumbnail } = await fetchGameInfo(placeId);
         
         const gameKey = `game:${universeId}`;
-        let gameData = await redis.get(gameKey);
+        //let gameData = await redis.get(gameKey);
+        let rawGameData = await redis.get(gameKey);
+        let gameData = rawGameData ? JSON.parse(rawGameData) : null;
+        
         let messageId = gameData ? gameData.messageId : null;
         const currentTime = Math.floor(Date.now() / 1000);
         if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside")) {
@@ -320,7 +324,8 @@ module.exports = async function handler(req, res) {
         }
         
         const newGameData = { messageId: messageId, timestamp: currentTime, placeId: placeId };
-        await redis.set(gameKey, newGameData);
+        await redis.set(gameKey, JSON.stringify(newGameData));
+        //await redis.set(gameKey, newGameData);
         
         res.status(200).json({ success: true });
         cleanupStaleGames(redis, REAL_WEBHOOK_URL);
