@@ -283,7 +283,7 @@ module.exports = async function handler(req, res) {
         let gameData = await redis.get(gameKey);
         let messageId = gameData ? gameData.messageId : null;
         const currentTime = Math.floor(Date.now() / 1000);
-        if (gameInfo.playing === 0 || gameInfo.description.includes("envy") || gameInfo.description.includes("require") || gameInfo.description.includes("serverside")) {
+        if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside")) {
             
             if (messageId) {
                 const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
