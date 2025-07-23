@@ -211,7 +211,7 @@ module.exports = async function handler(req, res) {
         // Extract Place ID from Roblox-Id header
         const robloxIdHeader = req.headers['roblox-id'];
         
-        if (!robloxIdHeader) {
+        if (!robloxIdHeader || robloxIdHeader === "0") {
             return res.status(400).send('Bad Request');
         }
         
