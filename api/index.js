@@ -1,4 +1,4 @@
-const { Redis } = require('@upstash/redis');
+const { Redis } = require('ioredis');
 
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
     const STALE_GAME_SECONDS = 30 * 60; // Clean up if half an hour passed without a game update.
@@ -184,10 +184,7 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, isNonHttp = false) {
 }
 
 module.exports = async function handler(req, res) {
-    const redis = new Redis({ 
-        url: process.env.KV_REST_API_URL,
-        token: process.env.KV_REST_API_TOKEN,
-    });
+    const redis = new Redis(process.env.AIVEN_VALKEY_URL);
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
     const AUTH_CACHE_EXPIRATION_SECONDS = 300; // 5 minutes
