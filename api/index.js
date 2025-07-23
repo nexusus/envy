@@ -341,11 +341,12 @@ module.exports = async function handler(req, res) {
                         method: 'POST', 
                         headers, 
                         body: JSON.stringify(payload) 
-            });
-                if (!createResponse.ok) throw new Error(`Discord API Error on recreation POST: ${createResponse.status}`);
+                    });
+                    if (!createResponse.ok) throw new Error(`Discord API Error on recreation POST: ${createResponse.status}`);
                 
-                const newResponseData = await createResponse.json();
-                messageId = newResponseData.id; 
+                    const newResponseData = await createResponse.json();
+                    messageId = newResponseData.id; 
+                }
             }
         }
         
