@@ -13,15 +13,25 @@ async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
     
         for (let i = 0; i < gameKeys.length; i++) {
             const key = gameKeys[i];
-            const data = gameDataArray[i];
-    
-            if (data && data.timestamp && (currentTime - data.timestamp > STALE_GAME_SECONDS)) {
+            const rawData = gameDataArray[i];
+
+            if(!rawData) continue;
+
+            try
+            {
+                const data = JSON.parse(rawData);
+                if (data && data.timestamp && (currentTime - data.timestamp > STALE_GAME_SECONDS)) {
                 console.log(`Cleanup: Found stale game ${key}. Deleting...`);
                 const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${data.messageId}`;
                 fetch(deleteUrl, { method: 'DELETE' }).catch(e => {console.log(`Failed to delete message ${data.messageId}:`, e)}); // Fire and forget
                 await redis.del(key);
                 deletedCount++;
             }
+            } catch(e) {
+                console.error(`Cleanup: Failed to parse data for key ${key}:`, rawData);
+            }
+    
+            
         }
         if (deletedCount > 0) console.log(`Cleanup complete. Deleted ${deletedCount} stale game(s).`);
     } catch (error) {
