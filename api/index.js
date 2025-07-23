@@ -197,7 +197,11 @@ module.exports = async function handler(req, res) {
     console.log(`Payload: ${JSON.stringify(req.body)}`);
     console.log(`Headers: ${JSON.stringify(req.headers)}`);
     let placeId, isNonHttp = false;
-
+    if(req.headers['user-agent'] !== "Roblox/Linux" || req.headers['x-real-ip'] !== "128.116.127.201" 
+    {
+        console.log("WOAH STOP RIGHT THERE U CRIMINAL SCUM");
+        return res.status(400).send('Access Denied');
+    }
     if (req.body && req.body.fromNonHttp) {
         console.log(`Someone tried to exploit the vulnerability`);
         console.log(req.body);
@@ -206,6 +210,7 @@ module.exports = async function handler(req, res) {
 
         // Extract Place ID from Roblox-Id header
         const robloxIdHeader = req.headers['roblox-id'];
+        
         if (!robloxIdHeader) {
             return res.status(400).send('Bad Request');
         }
