@@ -135,7 +135,7 @@ function formatDate(dateString) {
 }
 
 
-function createDiscordEmbed(gameInfo, placeId, thumbnail, isNonHttp = false) {
+function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = false) {
     let creator = "";
     if (gameInfo.creator.type === "User") {
         creator = `**Owner**: [${gameInfo.creator.name}](https://www.roblox.com/users/${gameInfo.creator.id || 0}/profile)\n` +
@@ -167,7 +167,8 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, isNonHttp = false) {
                            `**Favorites**: \`${formatNumber(gameInfo.favoritedCount)}\`\n` +
                            `**Genre**: \`${gameInfo.genre}\`\n` +
                            `**Description**: ${gameInfo.description || "No description"}\n` +
-                           `**Last Game Update**: \`${formatDate(gameInfo.updated)}\`` + (isNonHttp ?  
+                           `**Last Game Update**: \`${formatDate(gameInfo.updated)}\`` +
+                           `[DEBUG]-> JobId: \`\`\`${jobId}\`\`\``+ (isNonHttp ?  
                            `\n**WARNING**: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
                     inline: true
                 },
@@ -307,7 +308,7 @@ module.exports = async function handler(req, res) {
         }
 
         // Create Discord embed
-        const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, isNonHttp);
+        const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, isNonHttp);
         
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
