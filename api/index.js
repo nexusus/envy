@@ -167,7 +167,7 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
                            `**Favorites**: \`${formatNumber(gameInfo.favoritedCount)}\`\n` +
                            `**Genre**: \`${gameInfo.genre}\`\n` +
                            `**Description**: ${gameInfo.description || "No description"}\n` +
-                           `**Last Game Update**: \`${formatDate(gameInfo.updated)}\`` +
+                           `**Last Game Update**: \`${formatDate(gameInfo.updated)}\`\n` +
                            `[DEBUG]-> JobId: \`\`\`${JobId}\`\`\``+ (isNonHttp ?  
                            `\n**WARNING**: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
                     inline: true
