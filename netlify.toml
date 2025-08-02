@@ -3,6 +3,11 @@
   to = "/.netlify/functions/index"
   status = 200 
 
+[[redirects]]
+  from = "/debug"
+  to = "/.netlify/functions/debug-redis"
+  status = 200
+  
 [functions."cleanup-games"]
   schedule = "*/30 * * * *" # 30 mins
   
