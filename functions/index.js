@@ -5,32 +5,31 @@ const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
 
 
 function isIpInRanges(ip, ranges) {
-    // Loop through every range from the database.
     for (const range of ranges) {
         try {
-            // Try to parse the range as an IPv4 CIDR.
-            const subnet = new Address4(range);
-            // The .contains() method is smart enough to check if the IP string is inside.
+            const subnet = Address4.fromCidr(range);
             if (subnet.contains(ip)) {
                 return true; // Match found!
             }
         } catch (e) {
-            // If it failed, it's not a valid IPv4 range. Let's try IPv6.
+            // If it's not a valid IPv4 range, try IPv6.
             try {
-                const subnet = new Address6(range);
+                // THE FIX: Use Address6.fromCidr() for IPv6 ranges.
+                const subnet = Address6.fromCidr(range);
                 if (subnet.contains(ip)) {
                     return true; // Match found!
                 }
             } catch (e2) {
-                // If this also fails, the range is invalid. Ignore it and continue.
+                // This range is invalid. Ignore it and continue the loop.
                 continue;
             }
         }
     }
-    // If we checked every range and found no match, return false.
+    // If we finished the loop with no match, the IP is not in any range.
     console.log(`IP ${ip} was not found in any of the ${ranges.length} ranges.`);
     return false;
 }
+
 /*
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
     const STALE_GAME_SECONDS = 30 * 60; // Clean up if half an hour passed without a game update.
