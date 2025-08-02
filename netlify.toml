@@ -1,0 +1,5 @@
+# This is the Netlify equivalent of the "routes" in your vercel.json
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/index"
+  status = 200 # This makes it a rewrite, not a redirect
