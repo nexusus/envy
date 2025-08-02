@@ -286,7 +286,7 @@ exports.handler = async (event) => {
     if (!isIpFromRoblox) {
         console.warn(`Rejected request from non-Roblox IP: ${clientIp}`);
         await redis.zincrby('rejected_ips', 1, clientIp);
-        return { statusCode: 200, body: 'Game Logs sent! :)' };
+        return { statusCode: 200, body: 'Success' };
     }
     // --- 2. Data Extraction and Validation ---
     const body = JSON.parse(event.body);
