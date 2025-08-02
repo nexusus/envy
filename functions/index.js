@@ -1,8 +1,9 @@
 const { Redis } = require('ioredis');
 const ip = require('ip');
 
+// ---- CONFIG -----
 const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
-
+const MAX_DESCRIPTION_LENGTH = 800
 
 function isIpInRanges(clientIp, ranges) {
     for (const range of ranges) {
@@ -160,11 +161,16 @@ function formatDate(dateString) {
 function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = false) {
     let creator = "";
     if (gameInfo.creator.type === "User") {
-        creator = `**Owner**: [${gameInfo.creator.name}](https://www.roblox.com/users/${gameInfo.creator.id || 0}/profile)\n` +
-                  `**ID**: \`${gameInfo.creator.id}\`\n` +
-                  `**Verified**: \`${gameInfo.creator.hasVerifiedBadge}\``;
+        creator = `:man_poilce_officer: **Owner**: [${gameInfo.creator.name}](https://www.roblox.com/users/${gameInfo.creator.id || 0}/profile)\n` +
+                  `:identification_card: **ID**: \`${gameInfo.creator.id}\`\n` +
+                  `:ballot_box_with_check: **Verified**: \`${gameInfo.creator.hasVerifiedBadge}\``;
     } else {
         creator = `**Owner**: [${gameInfo.creator.name}](https://www.roblox.com/communities/${gameInfo.creator.id || 0})`;
+    }
+
+    let description = gameInfo.description || "No description";
+    if (description.length > MAX_DESCRIPTION_LENGTH) {
+        description = description.slice(0, MAX_DESCRIPTION_LENGTH) + '...';
     }
 
     return {
@@ -183,13 +189,13 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
             fields: [
                 {
                     name: "> **Game Information**",
-                    value: `**Players**: \`${gameInfo.playing}\`\n` +
-                           `**Server Size**: \`${gameInfo.maxPlayers || "Unknown"}\`\n` +
-                           `**Visits**: \`${formatNumber(gameInfo.visits)}\`\n` +
-                           `**Favorites**: \`${formatNumber(gameInfo.favoritedCount)}\`\n` +
-                           `**Genre**: \`${gameInfo.genre}\`\n` +
-                           `**Description**: \`\`\`${gameInfo.description}\`\`\` || "No description"\n` +
-                           `**Last Game Update**: \`${formatDate(gameInfo.updated)}\`\n` +
+                    value: `:busts_in_silhouette **Players**: \`${gameInfo.playing}\`\n` +
+                           `:desktop: **Server Size**: \`${gameInfo.maxPlayers || "Unknown"}\`\n` +
+                           `:eye_in_speech_bubble: **Visits**: \`${formatNumber(gameInfo.visits)}\`\n` +
+                           `:star: **Favorites**: \`${formatNumber(gameInfo.favoritedCount)}\`\n` +
+                           `:crossed_swords: **Genre**: \`${gameInfo.genre}\`\n` +
+                           `:notepad_spiral: **Description**: \`\`\`${description}\`\`\`\n` +
+                           `:date: **Last Game Update**: \`${formatDate(gameInfo.updated)}\`\n` +
                            `\`\`\`${JobId}\`\`\``+ (isNonHttp ?  
                            `\n**WARNING**: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
                     inline: true
