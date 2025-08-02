@@ -19,11 +19,7 @@ exports.handler = async (event) => {
     let errorMessage = null;
 
     try {
-        redis = new Redis(process.env.AIVEN_VALKEY_URL, {
-            lazyConnect: true,
-            tls: { servername: new URL(process.env.AIVEN_VALKEY_URL).hostname },
-            connectTimeout: 15000
-        });
+        redis = new Redis(process.env.AIVEN_VALKEY_URL);
 
         robloxIpData = await redis.get('roblox_ip_ranges');
         const rejectedIpsRaw = await redis.zrevrange('rejected_ips', 0, 99, 'WITHSCORES');
