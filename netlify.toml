@@ -5,3 +5,6 @@
 
 [functions."cleanup-games"]
   schedule = "*/30 * * * *" # 30 mins
+  
+[functions."update-ip-list"]
+  schedule = "0 0 * * *" # every day
