@@ -220,6 +220,16 @@ exports.handler = async (event) => {
     if (!clientIp) {
         return { statusCode: 403, body: 'Forbidden: Could not determine client IP address.' };
     }
+    
+    // --- Environment and Connection Setup ---
+    const redis = new Redis(process.env.AIVEN_VALKEY_URL);
+    const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+    const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
+    const AUTH_CACHE_EXPIRATION_SECONDS = 300;
+
+
+    // --- Contineum of Protection ---
+    
     let activeIpRanges;
     try {
         const dynamicRangesJson = await redis.get('roblox_ip_ranges');
@@ -241,14 +251,6 @@ exports.handler = async (event) => {
         console.warn(`Rejected request from non-Roblox IP: ${clientIp}`);
         return { statusCode: 403, body: 'L33t: your Ip has been compromised. We are gonna get you.' };
     }
-    // --- Environment and Connection Setup ---
-    const redis = new Redis(process.env.AIVEN_VALKEY_URL);
-    const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
-    const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
-    const AUTH_CACHE_EXPIRATION_SECONDS = 300;
-
-    
-
     
     // --- 1. Request Validation ---
     if (event.httpMethod !== 'POST') {
