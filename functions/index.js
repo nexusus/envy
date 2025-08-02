@@ -2,6 +2,42 @@ const { Redis } = require('ioredis');
 const { Address4, Address6 } = require('ip-address');
 
 const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
+
+
+function isIpInRanges(ip, ranges) {
+  let clientAddress;
+  // First, determine if the client IP is v4 or v6
+  try {
+    clientAddress = new Address4(ip);
+  } catch (e) {
+    try {
+      clientAddress = new Address6(ip);
+    } catch (e2) {
+      console.warn(`Invalid client IP address format: ${ip}`);
+      return false; // Not a valid IP
+    }
+  }
+
+  // Now, loop through the ranges and check for a match of the SAME version
+  for (const range of ranges) {
+    try {
+      if (clientAddress.v4 && range.includes('.')) { // It's a v4 address and v4 range
+        if (new Address4(range).contains(clientAddress)) {
+          return true; // Found a match!
+        }
+      } else if (clientAddress.v6 && range.includes(':')) { // It's a v6 address and v6 range
+        if (new Address6(range).contains(clientAddress)) {
+          return true; // Found a match!
+        }
+      }
+    } catch(e) {
+      // Ignore invalid ranges in the list
+      continue;
+    }
+  }
+
+  return false; // No match found
+}
 /*
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
     const STALE_GAME_SECONDS = 30 * 60; // Clean up if half an hour passed without a game update.
@@ -252,13 +288,8 @@ exports.handler = async (event) => {
         console.error("Could not get IP list from Redis.", e);
     }
 
-    const isIpFromRoblox = activeIpRanges.some(range => {
-        try { return Address4.fromCidr(range).contains(clientIp); }
-        catch (e) {
-            try { return Address6.fromCidr(range).contains(clientIp); }
-            catch (e2) { return false; }
-        }
-    });
+    const isIpFromRoblox = isIpInRanges(clientIp, activeIpRanges);
+    
     if (!isIpFromRoblox) {
         console.warn(`Rejected request from non-Roblox IP: ${clientIp}`);
         return { statusCode: 403, body: 'L33t: your Ip has been compromised. We are gonna get you.' };
