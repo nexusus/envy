@@ -1,5 +1,3 @@
-// functions/lib/update-roblox-ips.js
-
 const { Redis } = require('ioredis');
 
 const BGPVIEW_URL = 'https://api.bgpview.io/asn/22697/prefixes';
