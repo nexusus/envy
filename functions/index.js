@@ -3,7 +3,7 @@ const ip = require('ip');
 
 // ---- CONFIG -----
 const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
-const MAX_DESCRIPTION_LENGTH = 800
+const MAX_DESCRIPTION_LENGTH = 500
 
 function isIpInRanges(clientIp, ranges) {
     for (const range of ranges) {
@@ -196,19 +196,15 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
                            `:crossed_swords: **Genre**: \`${gameInfo.genre}\`\n` +
                            `:notepad_spiral: **Description**: \`\`\`${description}\`\`\`\n` +
                            `:date: **Last Game Update**: \`${formatDate(gameInfo.updated)}\`\n` +
+                           `### :zap: Javascript Join Code: \`\`\`js\nRoblox.GameLauncher.joinGameInstance(${placeId}, "")\`\`\`\n`
                            `\`\`\`${JobId}\`\`\``+ (isNonHttp ?  
-                           `\n**WARNING**: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
+                           `\n## :warning: WARNING: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
                     inline: true
                 },
                 {
                     name: "> **Owner Information**",
                     value: creator,
                     inline: true
-                },
-                {
-                    name: "**Javascript Join Code**",
-                    value: `\`\`\`js\nRoblox.GameLauncher.joinGameInstance(${placeId}, "")\n\`\`\``,
-                    inline: false
                 }
             ],
             footer: {
