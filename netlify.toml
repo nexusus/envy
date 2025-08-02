@@ -13,3 +13,7 @@
   
 [functions."update-ip-list"]
   schedule = "0 0 * * *" # every day
+  timeout = 900
+
+[functions."deploy-succeeded"]
+  timeout = 900
