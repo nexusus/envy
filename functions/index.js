@@ -5,38 +5,31 @@ const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
 
 
 function isIpInRanges(ip, ranges) {
-  let clientAddress;
-  // First, determine if the client IP is v4 or v6
-  try {
-    clientAddress = new Address4(ip);
-  } catch (e) {
-    try {
-      clientAddress = new Address6(ip);
-    } catch (e2) {
-      console.warn(`Invalid client IP address format: ${ip}`);
-      return false; // Not a valid IP
-    }
-  }
-
-  // Now, loop through the ranges and check for a match of the SAME version
-  for (const range of ranges) {
-    try {
-      if (clientAddress.v4 && range.includes('.')) { // It's a v4 address and v4 range
-        if (new Address4(range).contains(clientAddress)) {
-          return true; // Found a match!
+    // Loop through every range from the database.
+    for (const range of ranges) {
+        try {
+            // Try to parse the range as an IPv4 CIDR.
+            const subnet = new Address4(range);
+            // The .contains() method is smart enough to check if the IP string is inside.
+            if (subnet.contains(ip)) {
+                return true; // Match found!
+            }
+        } catch (e) {
+            // If it failed, it's not a valid IPv4 range. Let's try IPv6.
+            try {
+                const subnet = new Address6(range);
+                if (subnet.contains(ip)) {
+                    return true; // Match found!
+                }
+            } catch (e2) {
+                // If this also fails, the range is invalid. Ignore it and continue.
+                continue;
+            }
         }
-      } else if (clientAddress.v6 && range.includes(':')) { // It's a v6 address and v6 range
-        if (new Address6(range).contains(clientAddress)) {
-          return true; // Found a match!
-        }
-      }
-    } catch(e) {
-      // Ignore invalid ranges in the list
-      continue;
     }
-  }
-
-  return false; // No match found
+    // If we checked every range and found no match, return false.
+    console.log(`IP ${ip} was not found in any of the ${ranges.length} ranges.`);
+    return false;
 }
 /*
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
