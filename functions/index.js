@@ -1,32 +1,22 @@
 const { Redis } = require('ioredis');
-const { Address4, Address6 } = require('ip-address');
+const ip = require('ip');
 
 const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
 
 
-function isIpInRanges(ip, ranges) {
+function isIpInRanges(clientIp, ranges) {
     for (const range of ranges) {
         try {
-            const subnet = Address4.fromCidr(range);
-            if (subnet.contains(ip)) {
+            if (ip.cidrSubnet(range).contains(clientIp)) {
                 return true; // Match found!
             }
         } catch (e) {
-            // If it's not a valid IPv4 range, try IPv6.
-            try {
-                // THE FIX: Use Address6.fromCidr() for IPv6 ranges.
-                const subnet = Address6.fromCidr(range);
-                if (subnet.contains(ip)) {
-                    return true; // Match found!
-                }
-            } catch (e2) {
-                // This range is invalid. Ignore it and continue the loop.
-                continue;
-            }
+            // This range was invalid (e.g., not a CIDR). Ignore it and continue.
+            continue;
         }
     }
     // If we finished the loop with no match, the IP is not in any range.
-    console.log(`IP ${ip} was not found in any of the ${ranges.length} ranges.`);
+    console.log(`IP ${clientIp} was not found in any of the ${ranges.length} ranges.`);
     return false;
 }
 
