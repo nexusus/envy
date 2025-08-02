@@ -1,7 +1,7 @@
 const { Redis } = require('ioredis');
 const { Address4, Address6 } = require('ip-address');
 
-
+const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
 /*
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
     const STALE_GAME_SECONDS = 30 * 60; // Clean up if half an hour passed without a game update.
@@ -222,12 +222,16 @@ exports.handler = async (event) => {
     }
     
     // --- Environment and Connection Setup ---
-    const redis = new Redis(process.env.AIVEN_VALKEY_URL, {
+
+    /*
+    {
         tls: {
             servername: new URL(process.env.AIVEN_VALKEY_URL).hostname
         },
         connectTimeout: 10000         
     });
+    */
+    const redis = new Redis(process.env.AIVEN_VALKEY_URL);
     redis.on('error', (err) => {
         console.error('[ioredis] client error:', err);
     });
@@ -238,7 +242,7 @@ exports.handler = async (event) => {
 
     // --- Contineum of Protection ---
     
-    let activeIpRanges;
+    let activeIpRanges = FALLBACK_ROBLOX_IP_RANGES;
     try {
         const dynamicRangesJson = await redis.get('roblox_ip_ranges');
         if (dynamicRangesJson) {
