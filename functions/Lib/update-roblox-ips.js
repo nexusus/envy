@@ -7,10 +7,7 @@ async function updateRobloxIps() {
     console.log("Executing core logic: fetching and storing Roblox IPs.");
     
     // Connect to Redis using the secure TLS settings.
-    const redis = new Redis(process.env.AIVEN_VALKEY_URL, {
-        tls: { servername: new URL(process.env.AIVEN_VALKEY_URL).hostname },
-        connectTimeout: 10000
-    });
+    const redis = new Redis(process.env.AIVEN_VALKEY_URL);
 
     redis.on('error', (err) => {
       console.error('[ioredis] client error in updateRobloxIps:', err);
