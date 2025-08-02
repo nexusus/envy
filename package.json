@@ -4,6 +4,7 @@
   "dependencies": {
     "@upstash/redis": "^1.28.0",
     "ioredis": "^5.4.1",
-    "ip-address": "^9.0.5"
+    "ip-address": "^9.0.5",
+    "ip": "^2.0.1"
   }
 }
