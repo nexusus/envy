@@ -1,4 +1,9 @@
 [[redirects]]
+  from = "/force-update"
+  to = "/.netlify/functions/force-update"
+  status = 200
+  
+[[redirects]]
   from = "/debug"
   to = "/.netlify/functions/debug-redis"
   status = 200
