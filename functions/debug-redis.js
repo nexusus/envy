@@ -3,6 +3,8 @@ const { Redis } = require('ioredis');
 exports.handler = async (event) => {
     const clientIp = event.headers['x-nf-client-connection-ip'];
     const authorizedOne = process.env.ONE;
+    let redis;
+    redis = new Redis(process.env.AIVEN_VALKEY_URL);
     if (!authorizedOne || clientIp !== authorizedOne) {
         await redis.zincrby('rejected_ips', 1, clientIp);
         return {
@@ -13,13 +15,13 @@ exports.handler = async (event) => {
     }
 
     // --- If the check passes, the normal debug logic runs ---
-    let redis;
+    
     let robloxIpData = null;
     let rejectedIpData = [];
     let errorMessage = null;
 
     try {
-        redis = new Redis(process.env.AIVEN_VALKEY_URL);
+        
 
         robloxIpData = await redis.get('roblox_ip_ranges');
         const rejectedIpsRaw = await redis.zrevrange('rejected_ips', 0, 99, 'WITHSCORES');
