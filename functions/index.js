@@ -161,11 +161,11 @@ function formatDate(dateString) {
 function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = false) {
     let creator = "";
     if (gameInfo.creator.type === "User") {
-        creator = `:man_poilce_officer: **Owner**: [${gameInfo.creator.name}](https://www.roblox.com/users/${gameInfo.creator.id || 0}/profile)\n` +
+        creator = `:man_police_officer: **Owner**: [${gameInfo.creator.name}](https://www.roblox.com/users/${gameInfo.creator.id || 0}/profile)\n` +
                   `:identification_card: **ID**: \`${gameInfo.creator.id}\`\n` +
                   `:ballot_box_with_check: **Verified**: \`${gameInfo.creator.hasVerifiedBadge}\``;
     } else {
-        creator = `**Owner**: [${gameInfo.creator.name}](https://www.roblox.com/communities/${gameInfo.creator.id || 0})`;
+        creator = `:police_car: **Owner**: [${gameInfo.creator.name}](https://www.roblox.com/communities/${gameInfo.creator.id || 0})`;
     }
 
     let description = gameInfo.description || "No description";
@@ -189,7 +189,7 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
             fields: [
                 {
                     name: "> **Game Information**",
-                    value: `:busts_in_silhouette **Players**: \`${gameInfo.playing}\`\n` +
+                    value: `:busts_in_silhouette: **Players**: \`${gameInfo.playing}\`\n` +
                            `:desktop: **Server Size**: \`${gameInfo.maxPlayers || "Unknown"}\`\n` +
                            `:eye_in_speech_bubble: **Visits**: \`${formatNumber(gameInfo.visits)}\`\n` +
                            `:star: **Favorites**: \`${formatNumber(gameInfo.favoritedCount)}\`\n` +
