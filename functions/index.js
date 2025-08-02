@@ -259,7 +259,16 @@ exports.handler = async (event) => {
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
     const AUTH_CACHE_EXPIRATION_SECONDS = 300;
 
-
+    // --- 1. Request Validation ---
+    if (event.httpMethod !== 'POST') {
+        return { statusCode: 405, body: 'Method Not Allowed.' };
+    }
+    if (event.headers['x-secret-header'] !== SECRET_HEADER) {
+        return { statusCode: 401, body: 'Unauthorized' };
+    }
+    if (event.headers['user-agent'] !== "Roblox/Linux") {
+        return { statusCode: 400, body: 'Access Denied.' };
+    }
     // --- Contineum of Protection ---
     
     let activeIpRanges = FALLBACK_ROBLOX_IP_RANGES;
@@ -279,16 +288,7 @@ exports.handler = async (event) => {
         return { statusCode: 403, body: 'L33t: your Ip has been compromised. We are gonna get you.' };
     }
     
-    // --- 1. Request Validation ---
-    if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: 'Method Not Allowed.' };
-    }
-    if (event.headers['x-secret-header'] !== SECRET_HEADER) {
-        return { statusCode: 401, body: 'Unauthorized' };
-    }
-    if (event.headers['user-agent'] !== "Roblox/Linux") {
-        return { statusCode: 400, body: 'Access Denied.' };
-    }
+    
 
     // --- 2. Data Extraction and Validation ---
     const body = JSON.parse(event.body);
