@@ -222,7 +222,15 @@ exports.handler = async (event) => {
     }
     
     // --- Environment and Connection Setup ---
-    const redis = new Redis(process.env.AIVEN_VALKEY_URL);
+    const redis = new Redis(process.env.AIVEN_VALKEY_URL, {
+        tls: {
+            servername: new URL(process.env.AIVEN_VALKEY_URL).hostname
+        },
+        connectTimeout: 10000         
+    });
+    redis.on('error', (err) => {
+        console.error('[ioredis] client error:', err);
+    });
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
     const AUTH_CACHE_EXPIRATION_SECONDS = 300;
