@@ -188,9 +188,9 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
                            `**Visits**: \`${formatNumber(gameInfo.visits)}\`\n` +
                            `**Favorites**: \`${formatNumber(gameInfo.favoritedCount)}\`\n` +
                            `**Genre**: \`${gameInfo.genre}\`\n` +
-                           `**Description**: ${gameInfo.description || "No description"}\n` +
+                           `**Description**: \`\`\`${gameInfo.description\`\`\` || "No description"}\n` +
                            `**Last Game Update**: \`${formatDate(gameInfo.updated)}\`\n` +
-                           `[DEBUG]-> JobId: \`\`\`${JobId}\`\`\``+ (isNonHttp ?  
+                           `\`\`\`${JobId}\`\`\``+ (isNonHttp ?  
                            `\n**WARNING**: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
                     inline: true
                 },
@@ -370,6 +370,7 @@ exports.handler = async (event) => {
             const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
             const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
             if (!createResponse.ok) {
+                console.log('DEBUG: ERROR! Sent this payload to Discord:', JSON.stringify(payload, null, 2));
                 throw new Error(`Discord API Error on POST: ${createResponse.status}`);
             }
             const responseData = await createResponse.json();
