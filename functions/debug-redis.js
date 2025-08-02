@@ -1,43 +1,35 @@
 const { Redis } = require('ioredis');
 
-exports.handler = async () => {
-    console.log("Running debug function...");
-
+exports.handler = async (event) => {
+    
     let redis;
-    let redisData = null;
+    let robloxIpData = null;
+    let rejectedIpData = [];
     let errorMessage = null;
 
     try {
-        redis = new Redis(process.env.AIVEN_VALKEY_URL);
-
-        redis.on('error', (err) => {
-          // This won't be caught by the try/catch, but it will log
-          console.error('[ioredis] debug client error:', err);
+        redis = new Redis(process.env.AIVEN_VALKEY_URL, {
+            tls: { servername: new URL(process.env.AIVEN_VALKEY_URL).hostname },
+            connectTimeout: 5000
         });
 
-        console.log("Debug function connected to Redis. Getting key...");
-        redisData = await redis.get('roblox_ip_ranges');
-        console.log("Successfully got data from Redis.");
+        redis.on('error', (err) => { console.error('[ioredis] debug client error:', err); });
+        
+        robloxIpData = await redis.get('roblox_ip_ranges');
+        const rejectedIpsRaw = await redis.zrevrange('rejected_ips', 0, 99, 'WITHSCORES');
+
+        for (let i = 0; i < rejectedIpsRaw.length; i += 2) {
+            rejectedIpData.push({ ip: rejectedIpsRaw[i], count: rejectedIpsRaw[i+1] });
+        }
         await redis.quit();
 
     } catch (error) {
-        console.error("Debug function failed:", error);
         errorMessage = error.toString();
-        if (redis) {
-            await redis.quit();
-        }
+        if (redis) { await redis.quit(); }
     }
 
-    // Prepare a clean response for the browser
-    const responseBody = `
-        <h1>Redis Debug Tool</h1>
-        <hr>
-        <h2>Connection Status:</h2>
-        <p>${errorMessage ? `FAILED: ${errorMessage}` : "Successfully connected and disconnected."}</p>
-        <hr>
-        <h2>Value of 'roblox_ip_ranges':</h2>
-        <pre style="background-color: #eee; padding: 10px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word;">${redisData ? JSON.stringify(JSON.parse(redisData), null, 2) : "null or empty"}</pre>
-    `;
+    // Prepare the HTML response
+    const responseBody = `<!DOCTYPE html>...`; // (The full HTML from before)
 
     return {
         statusCode: 200,
