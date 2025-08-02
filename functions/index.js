@@ -1,5 +1,6 @@
 const { Redis } = require('ioredis');
 
+/*
 async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
     const STALE_GAME_SECONDS = 30 * 60; // Clean up if half an hour passed without a game update.
     const currentTime = Math.floor(Date.now() / 1000);
@@ -36,6 +37,7 @@ async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
         console.error("Background Cleanup Error:", error);
     }
 }
+*/
 
 async function fetchGameInfo(placeId) {
     try {
@@ -192,175 +194,144 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
     };
 }
 
-module.exports = async function handler(req, res) {
+async function isJobIdAuthentic(placeId, targetJobId) {
+    const apiUrl = 'https://gamejoin.roblox.com/v1/join-game-instance';
+    try {
+        const apiResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Roblox/WinInet' },
+            body: JSON.stringify({ placeId: placeId, gameId: targetJobId })
+        });
+        return apiResponse.status < 500;
+    } catch (error) {
+        console.error("Error during JobId authentication:", error);
+        return false;
+    }
+}
+
+
+
+
+exports.handler = async (event) => {
+    // --- Environment and Connection Setup ---
     const redis = new Redis(process.env.AIVEN_VALKEY_URL);
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
-    const AUTH_CACHE_EXPIRATION_SECONDS = 300; // 5 minutes
-    
-    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed.');
-    if (req.headers['x-secret-header'] !== SECRET_HEADER) return res.status(401).send('Unauthorized');
-    console.log(`Payload: ${JSON.stringify(req.body)}`);
-    console.log(`Headers: ${JSON.stringify(req.headers)}`);
-    let placeId, isNonHttp = false;
-    if(req.headers['user-agent'] !== "Roblox/Linux")
-    {
-        console.log("WOAH STOP RIGHT THERE U CRIMINAL SCUM");
-        return res.status(400).send('Access Denied');
-    }
-    if (req.body && req.body.fromNonHttp) {
-        console.log(`Someone tried to exploit the vulnerability`);
-        console.log(req.body);
-        return;
-    } else{
+    const AUTH_CACHE_EXPIRATION_SECONDS = 300;
 
-        // Extract Place ID from Roblox-Id header
-        const robloxIdHeader = req.headers['roblox-id'];
-        
-        if (!robloxIdHeader || robloxIdHeader === "0") {
-            return res.status(400).send('Bad Request');
-        }
-        
-        // Parse Place ID from header (format might be "placeId=123456" or just "123456")
-        
-        const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
-        if (placeIdMatch) {
-            placeId = placeIdMatch[1];
-        } else if (/^\d+$/.test(robloxIdHeader)) {
-            placeId = robloxIdHeader;
-        } else {
-            return res.status(400).send('Bad Request:');
-        }
+    // --- 1. Request Validation ---
+    if (event.httpMethod !== 'POST') {
+        return { statusCode: 405, body: 'Method Not Allowed.' };
     }
-    const jobId = req.body.jobId;
+    if (event.headers['x-secret-header'] !== SECRET_HEADER) {
+        return { statusCode: 401, body: 'Unauthorized' };
+    }
+    if (event.headers['user-agent'] !== "Roblox/Linux") {
+        return { statusCode: 400, body: 'Access Denied.' };
+    }
+
+    // --- 2. Data Extraction and Validation ---
+    const body = JSON.parse(event.body);
+    const robloxIdHeader = event.headers['roblox-id'];
+    let placeId;
+
+    if (!robloxIdHeader || robloxIdHeader === "0") {
+        return { statusCode: 400, body: 'Bad Request: Missing or invalid roblox-id header.' };
+    }
+
+    const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
+    if (placeIdMatch) {
+        placeId = placeIdMatch[1];
+    } else if (/^\d+$/.test(robloxIdHeader)) {
+        placeId = robloxIdHeader;
+    } else {
+        return { statusCode: 400, body: 'Bad Request: 1337' };
+    }
+
+    const jobId = body.jobId;
     if (!jobId || !placeId) {
-        console.log("sus required data miss...");
-        console.log(`jobId: ${jobId}\n placeId: ${placeId}\n isNonHttp: ${isNonHttp}`);
-        return res.status(400).send('Bad Request: Missing required data.');
+        return { statusCode: 400, body: 'Bad Request: 1336' };
     }
-
-    // Verify JobId authenticity
-    async function isJobIdAuthentic(placeId, targetJobId) {
-        const apiUrl = 'https://gamejoin.roblox.com/v1/join-game-instance';
-        try {
-            const apiResponse = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'Roblox/WinInet'
-                },
-                body: JSON.stringify({
-                    placeId: placeId,
-                    gameId: targetJobId
-                })
-            });
-            return apiResponse.status < 500;
-        } catch (error) {
-            console.error("Error during JobId authentication:", error);
-            return false;
-        }
-    }
-
-    const authCacheKey = `auth:${jobId}`;
-    const isAlreadyAuthenticated = await redis.get(authCacheKey);
-
-    if (!isAlreadyAuthenticated) {
-        console.log(`JobId ${jobId} not in cache. Performing live authentication...`);
-        const isAuthentic = await isJobIdAuthentic(placeId, jobId);
-
-        if (!isAuthentic) {
-            console.warn(`Rejected unauthenticated JobId: ${jobId}`);
-            return res.status(403).send('Forbidden: JobId authentication failed.');
-        }
-        // await redis.set(authCacheKey, 'true', { ex: AUTH_CACHE_EXPIRATION_SECONDS });
-        await redis.set(authCacheKey, 'true', 'EX', AUTH_CACHE_EXPIRATION_SECONDS);
-    }
-
-    // Rate limiting
-    const rateLimitKey = `rate:${jobId}`;
-    const currentRequests = await redis.incr(rateLimitKey);
-    if (currentRequests === 1) await redis.expire(rateLimitKey, 60);
-    if (currentRequests > 20) return res.status(429).send('Too Many Requests');
 
     try {
-        // Fetch game information from Roblox APIs
+        // --- 3. JobId Authentication & Caching ---
+        const authCacheKey = `auth:${jobId}`;
+        const isAlreadyAuthenticated = await redis.get(authCacheKey);
+
+        if (!isAlreadyAuthenticated) {
+            const isAuthentic = await isJobIdAuthentic(placeId, jobId);
+            if (!isAuthentic) {
+                console.warn(`Rejected unauthenticated JobId: ${jobId}`);
+                return { statusCode: 403, body: 'Forbidden: JobId authentication failed.' };
+            }
+            await redis.set(authCacheKey, 'true', 'EX', AUTH_CACHE_EXPIRATION_SECONDS);
+        }
+
+        // --- 4. Rate Limiting ---
+        const rateLimitKey = `rate:${jobId}`;
+        const currentRequests = await redis.incr(rateLimitKey);
+        if (currentRequests === 1) {
+            await redis.expire(rateLimitKey, 60);
+        }
+        if (currentRequests > 20) {
+            return { statusCode: 429, body: 'Too Many Requests' };
+        }
+
+        // --- 5. Core Logic ---
         const { gameInfo, universeId, thumbnail } = await fetchGameInfo(placeId);
-        
         const gameKey = `game:${universeId}`;
-        //let gameData = await redis.get(gameKey);
-        let rawGameData = await redis.get(gameKey);
-        let gameData = rawGameData ? JSON.parse(rawGameData) : null;
-        
+        const rawGameData = await redis.get(gameKey);
+        const gameData = rawGameData ? JSON.parse(rawGameData) : null;
         let messageId = gameData ? gameData.messageId : null;
         const currentTime = Math.floor(Date.now() / 1000);
+
+        // Skip or delete if game is empty or has a filtered description
         if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside")) {
-            
             if (messageId) {
-                const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
-                await fetch(deleteUrl, { method: 'DELETE' });
+                await fetch(`${REAL_WEBHOOK_URL}/messages/${messageId}`, { method: 'DELETE' });
                 await redis.del(gameKey);
             }
-            if(gameInfo.playing !== 0)
-            {
-                console.log(gameInfo.description);
-            }
-            return res.status(200).json({ success: true, action: 'skipped_empty_game' });
+            return { statusCode: 200, body: JSON.stringify({ success: true, action: 'skipped_or_deleted' }) };
         }
 
-        // Create Discord embed
-        const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, isNonHttp);
-        
+        const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false);
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
-        if (!messageId) {
-            
-            const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
-            const createResponse = await fetch(createUrl, { 
-                method: 'POST', 
-                headers, 
-                body: JSON.stringify(payload) 
-            });
-            if (!createResponse.ok) throw new Error(`Discord API Error on POST: ${createResponse.status}`);
-            const responseData = await createResponse.json();
-            messageId = responseData.id;
-        } else {
-            
+        // --- 6. Discord Message Handling (Create/Edit) ---
+        if (messageId) {
             const editUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
-            const editResponse = await fetch(editUrl, { 
-                method: 'PATCH', 
-                headers, 
-                body: JSON.stringify(payload) 
-            });
+            const editResponse = await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(payload) });
 
-            if(!editResponse.ok)
-            {
-                
-                if (editResponse.status === 404) {
-                    console.log(`Message ${messageId} not found. Recreating it...`);
-                    const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
-                    const createResponse = await fetch(createUrl, { 
-                        method: 'POST', 
-                        headers, 
-                        body: JSON.stringify(payload) 
-                    });
-                    if (!createResponse.ok) throw new Error(`Discord API Error on recreation POST: ${createResponse.status}`);
-                
-                    const newResponseData = await createResponse.json();
-                    messageId = newResponseData.id; 
-                }
+            if (!editResponse.ok && editResponse.status === 404) {
+                // Message was deleted on Discord, so recreate it
+                messageId = null; 
             }
         }
         
+        if (!messageId) {
+            const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
+            const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
+            if (!createResponse.ok) {
+                throw new Error(`Discord API Error on POST: ${createResponse.status}`);
+            }
+            const responseData = await createResponse.json();
+            messageId = responseData.id;
+        }
+
+        // --- 7. Update Redis State and Respond ---
         const newGameData = { messageId: messageId, timestamp: currentTime, placeId: placeId };
         await redis.set(gameKey, JSON.stringify(newGameData));
-        //await redis.set(gameKey, newGameData);
-        
-        res.status(200).json({ success: true });
-        cleanupStaleGames(redis, REAL_WEBHOOK_URL);
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ success: true, messageId: messageId })
+        };
+
     } catch (error) {
         console.error("Main Handler Error:", error);
-        if (!res.headersSent) {
-            return res.status(500).send(`Internal Server Error: ${error.message}`);
-        }
+        return {
+            statusCode: 500,
+            body: `Internal Server Error: ${error.message}`
+        };
     }
 };
