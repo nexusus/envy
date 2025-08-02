@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@upstash/redis": "^1.28.0",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "ip-address": "^9.0.5"
   }
 }
