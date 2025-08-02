@@ -196,7 +196,7 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
                            `:crossed_swords: **Genre**: \`${gameInfo.genre}\`\n` +
                            `:notepad_spiral: **Description**: \`\`\`${description}\`\`\`\n` +
                            `:date: **Last Game Update**: \`${formatDate(gameInfo.updated)}\`\n` +
-                           `### :zap: Javascript Join Code: \`\`\`js\nRoblox.GameLauncher.joinGameInstance(${placeId}, "")\`\`\`\n`
+                           `### :zap: Javascript Join Code: \`\`\`js\nRoblox.GameLauncher.joinGameInstance(${placeId}, "")\`\`\`\n`+
                            `\`\`\`${JobId}\`\`\``+ (isNonHttp ?  
                            `\n## :warning: WARNING: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
                     inline: true
