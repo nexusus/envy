@@ -1,6 +1,6 @@
 const { cleanupStaleGames } = require('./lib/core-logic.js');
 
-export default async function handler(request, response) {
+module.exports = async (request, response) => {
 
     if (request.headers['authorization'] !== `Bearer ${process.env.CRON_SECRET}`) {
         return response.status(401).send('Unauthorized');

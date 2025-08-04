@@ -234,7 +234,7 @@ async function isJobIdAuthentic(placeId, targetJobId) {
 
 
 
-export default async function handler(request, response) {
+module.exports = async (request, response) => {
     // Vercel: Check method
     if (request.method !== 'POST') {
         return response.status(405).send('Method Not Allowed.');

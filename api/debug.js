@@ -1,7 +1,7 @@
 const { Redis } = require('ioredis');
 
-export default async function handler(request, response) {
-    
+module.exports = async (request, response) => {
+
     const clientIp = request.headers['x-vercel-forwarded-for'];
     const authorizedOne = process.env.ONE;
     
