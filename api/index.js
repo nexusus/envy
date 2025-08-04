@@ -234,108 +234,87 @@ async function isJobIdAuthentic(placeId, targetJobId) {
 
 
 
-exports.handler = async (event) => {
-    // --- Protection
-    const clientIp = event.headers['x-nf-client-connection-ip'];
-    if (!clientIp) {
-        return { statusCode: 403, body: 'Forbidden: Could not determine client IP address.' };
+export default async function handler(request, response) {
+    // Vercel: Check method
+    if (request.method !== 'POST') {
+        return response.status(405).send('Method Not Allowed.');
     }
-    
-    // --- Environment and Connection Setup ---
 
-    /*
-    {
-        tls: {
-            servername: new URL(process.env.AIVEN_VALKEY_URL).hostname
-        },
-        connectTimeout: 10000         
-    });
-    */
+    // Vercel: Get IP from 'x-vercel-forwarded-for' header
+    const clientIp = request.headers['x-vercel-forwarded-for'];
+    if (!clientIp) {
+        return response.status(403).send('Forbidden: Could not determine client IP address.');
+    }
+
+    // --- Environment and Connection Setup ---
     const redis = new Redis(process.env.AIVEN_VALKEY_URL);
-    redis.on('error', (err) => {
-        console.error('[ioredis] client error:', err);
-    });
+    redis.on('error', (err) => console.error('[ioredis] client error:', err));
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
-    const SECRET_HEADER = process.env.SECRET_HEADER_KEY;
+    const SECRET_HEADER_KEY = process.env.SECRET_HEADER_KEY;
     const AUTH_CACHE_EXPIRATION_SECONDS = 300;
 
-    // --- 1. Request Validation ---
-    if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: 'Method Not Allowed.' };
+    // --- Request Validation ---
+    if (request.headers['x-secret-header'] !== SECRET_HEADER_KEY) {
+        return response.status(401).send('Unauthorized');
     }
-    if (event.headers['x-secret-header'] !== SECRET_HEADER) {
-        return { statusCode: 401, body: 'Unauthorized' };
+    if (request.headers['user-agent'] !== "Roblox/Linux") {
+        return response.status(400).send('Access Denied.');
     }
-    if (event.headers['user-agent'] !== "Roblox/Linux") {
-        return { statusCode: 400, body: 'Access Denied.' };
-    }
-    // --- Contineum of Protection ---
-    
+
+    // --- IP Validation ---
     let activeIpRanges = FALLBACK_ROBLOX_IP_RANGES;
     try {
         const dynamicRangesJson = await redis.get('roblox_ip_ranges');
-        if (dynamicRangesJson) {
-            activeIpRanges = JSON.parse(dynamicRangesJson);
-        }
+        if (dynamicRangesJson) activeIpRanges = JSON.parse(dynamicRangesJson);
     } catch (e) {
         console.error("Could not get IP list from Redis.", e);
     }
-
     const isIpFromRoblox = isIpInRanges(clientIp, activeIpRanges);
-    
     if (!isIpFromRoblox) {
         console.warn(`Rejected request from non-Roblox IP: ${clientIp}`);
         await redis.zincrby('rejected_ips', 1, clientIp);
-        return { statusCode: 200, body: 'Success' };
+        return response.status(200).json({ success: true, message: 'Success' });
     }
-    // --- 2. Data Extraction and Validation ---
-    const body = JSON.parse(event.body);
-    const robloxIdHeader = event.headers['roblox-id'];
+
+    // --- Data Extraction and Validation ---
+    // Vercel: Use request.body directly, it's already parsed
+    const body = request.body;
+    const robloxIdHeader = request.headers['roblox-id'];
     let placeId;
 
     if (!robloxIdHeader || robloxIdHeader === "0") {
-        return { statusCode: 400, body: 'Bad Request: Missing or invalid roblox-id header.' };
+        return response.status(400).send('Bad Request: Missing or invalid roblox-id header.');
     }
-
     const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
     if (placeIdMatch) {
         placeId = placeIdMatch[1];
     } else if (/^\d+$/.test(robloxIdHeader)) {
         placeId = robloxIdHeader;
     } else {
-        return { statusCode: 400, body: 'Bad Request: 1337' };
+        return response.status(400).send('Bad Request: 1337');
     }
-
     const jobId = body.jobId;
     if (!jobId || !placeId) {
-        return { statusCode: 400, body: 'Bad Request: 1336' };
+        return response.status(400).send('Bad Request: 1336');
     }
 
     try {
-        // --- 3. JobId Authentication & Caching ---
+        // --- Core Logic (JobId Auth, Rate Limiting, Discord Message Handling) ---
         const authCacheKey = `auth:${jobId}`;
         const isAlreadyAuthenticated = await redis.get(authCacheKey);
-
         if (!isAlreadyAuthenticated) {
             const isAuthentic = await isJobIdAuthentic(placeId, jobId);
             if (!isAuthentic) {
                 console.warn(`Rejected unauthenticated JobId: ${jobId}`);
-                return { statusCode: 403, body: 'Forbidden: JobId authentication failed.' };
+                return response.status(403).send('Forbidden: JobId authentication failed.');
             }
             await redis.set(authCacheKey, 'true', 'EX', AUTH_CACHE_EXPIRATION_SECONDS);
         }
-
-        // --- 4. Rate Limiting ---
         const rateLimitKey = `rate:${jobId}`;
         const currentRequests = await redis.incr(rateLimitKey);
-        if (currentRequests === 1) {
-            await redis.expire(rateLimitKey, 60);
-        }
-        if (currentRequests > 20) {
-            return { statusCode: 429, body: 'Too Many Requests' };
-        }
-
-        // --- 5. Core Logic ---
+        if (currentRequests === 1) await redis.expire(rateLimitKey, 60);
+        if (currentRequests > 20) return response.status(429).send('Too Many Requests');
+        
         const { gameInfo, universeId, thumbnail } = await fetchGameInfo(placeId);
         const gameKey = `game:${universeId}`;
         const rawGameData = await redis.get(gameKey);
@@ -343,54 +322,37 @@ exports.handler = async (event) => {
         let messageId = gameData ? gameData.messageId : null;
         const currentTime = Math.floor(Date.now() / 1000);
 
-        // Skip or delete if game is empty or has a filtered description
         if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside")) {
             if (messageId) {
                 await fetch(`${REAL_WEBHOOK_URL}/messages/${messageId}`, { method: 'DELETE' });
                 await redis.del(gameKey);
             }
-            return { statusCode: 200, body: JSON.stringify({ success: true, action: 'skipped_or_deleted' }) };
+            return response.status(200).json({ success: true, action: 'skipped_or_deleted' });
         }
 
         const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false);
         const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
 
-        // --- 6. Discord Message Handling (Create/Edit) ---
         if (messageId) {
-            const editUrl = `${REAL_WEBHOOK_URL}/messages/${messageId}`;
-            const editResponse = await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(payload) });
-
-            if (!editResponse.ok && editResponse.status === 404) {
-                // Message was deleted on Discord, so recreate it
-                messageId = null; 
-            }
+            const editResponse = await fetch(`${REAL_WEBHOOK_URL}/messages/${messageId}`, { method: 'PATCH', headers, body: JSON.stringify(payload) });
+            if (!editResponse.ok && editResponse.status === 404) messageId = null;
         }
-        
         if (!messageId) {
-            const createUrl = `${REAL_WEBHOOK_URL}?wait=true`;
-            const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
-            if (!createResponse.ok) {
-                console.log('DEBUG: ERROR! Sent this payload to Discord:', JSON.stringify(payload, null, 2));
-                throw new Error(`Discord API Error on POST: ${createResponse.status}`);
-            }
+            const createResponse = await fetch(`${REAL_WEBHOOK_URL}?wait=true`, { method: 'POST', headers, body: JSON.stringify(payload) });
+            if (!createResponse.ok) throw new Error(`Discord API Error on POST: ${createResponse.status}`);
             const responseData = await createResponse.json();
             messageId = responseData.id;
         }
 
-        // --- 7. Update Redis State and Respond ---
         const newGameData = { messageId: messageId, timestamp: currentTime, placeId: placeId };
         await redis.set(gameKey, JSON.stringify(newGameData));
 
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ success: true, messageId: messageId })
-        };
+        return response.status(200).json({ success: true, messageId: messageId });
 
     } catch (error) {
         console.error("Main Handler Error:", error);
-        return {
-            statusCode: 500,
-            body: `Internal Server Error: ${error.message}`
-        };
+        return response.status(500).send(`Internal Server Error: ${error.message}`);
+    } finally {
+        await redis.quit();
     }
-};
+}
