@@ -50,7 +50,10 @@ module.exports = async (req, res) => {
 
     // --- Request Validation ---
     
-    // -- IP Check --
+    // -- IP Check -- Turned off for testing
+
+    
+    /*
     let activeIpRanges = FALLBACK_ROBLOX_IP_RANGES;
     try {
         const dynamicRangesJson = await redis.get('roblox_ip_ranges');
@@ -64,6 +67,7 @@ module.exports = async (req, res) => {
         await redis.zincrby('rejected_ips', 1, clientIp);
         return res.status(200).json({ success: true, message: 'You have received the linker!' });
     }
+    */
 
     // -- Data Extraction and Validation --
     const robloxIdHeader = req.headers['roblox-id'];
