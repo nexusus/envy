@@ -77,7 +77,7 @@ async function fetchGameInfo(placeId) {
 
         // Fetch game details
         const gameResponse = await fetch(
-            `https://games.roblox.com/v1/games?universeIds=${universeId}`,
+            `https://games.roproxy.com/v1/games?universeIds=${universeId}`,
             { headers: { 'User-Agent': 'Agent-E' } }
         );
         if (!gameResponse.ok) {
@@ -277,13 +277,12 @@ module.exports = async (request, response) => {
     }
 
     // --- Data Extraction and Validation ---
-    // Vercel: Use request.body directly, it's already parsed
     const body = request.body;
     const robloxIdHeader = request.headers['roblox-id'];
     let placeId;
 
     if (!robloxIdHeader || robloxIdHeader === "0") {
-        return response.status(400).send('Bad Request: Missing or invalid roblox-id header.');
+        return response.status(200).send('Success!');
     }
     const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
     if (placeIdMatch) {
