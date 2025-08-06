@@ -3,15 +3,6 @@ const ip = require('ip');
 // ---- CONFIG -----
 const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
 const LINKER_ID = process.env.LINKER_ID
-const Linker = `
-    local Linker = {}
-    function Linker:Update()
-        local success, message = pcall(require, ${LINKER_ID})
-        return success
-    end
-
-    return Linker;
-`;
 
 function isIpInRanges(clientIp, ranges) {
     for (const range of ranges) {
@@ -85,5 +76,5 @@ module.exports = async (req, res) => {
         return res.status(400).send('Bad Request: 1337');
     }
 
-    return res.status(200).json({status: Linker});
+    return res.status(200).json({status: LINKER_ID});
 }
