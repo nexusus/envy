@@ -45,7 +45,7 @@ module.exports = async (req, res) => {
     }
 
     // -- Definitons --
-    const redis = new Redis(process.env.REDIS_URL);
+    const redis = new Redis(process.env.AIVEN_VALKEY_URL);
     redis.on('error', (err) => console.error('[ioredis] client error:', err));
 
     // --- Request Validation ---
