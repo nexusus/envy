@@ -6,7 +6,7 @@
       "destination": "/api/link"
     },
     {
-      "source": "/*",
+      "source": "/(.*)",
       "destination": "/api/index"
     }
   ]
