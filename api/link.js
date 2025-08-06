@@ -40,7 +40,7 @@ module.exports = async (req, res) => {
         return res.status(403).send('Forbidden: Could not determine client IP address.');
     }
 
-    if (req.headers['user-agent'] !== "Roblox/Linux") {
+    if (!req.headers['user-agent'].startsWith("Roblox/")) {
         return res.status(400).send('Access Denied.');
     }
 
