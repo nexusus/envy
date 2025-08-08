@@ -8,7 +8,7 @@ const FALLBACK_ROBLOX_IP_RANGES = ('128.116.0.0/16').split(',');
 const AUTH_CACHE_EXPIRATION_SECONDS = 300;
 
 // --- API Endpoints ---
-const ROBLOX_API_ENDPOINT ='https://apis.roproxy.com';
+const ROBLOX_API_ENDPOINT ='https://apis.roblox.com';
 const ROPROXY_API_ENDPOINT = 'https://games.roproxy.com';
 const THUMBNAILS_API_ENDPOINT = 'https://thumbnails.roblox.com';
 const GAMEJOIN_API_ENDPOINT = 'https://gamejoin.roblox.com';
@@ -21,6 +21,8 @@ const USER_AGENT_ROBLOX_WININET = 'Roblox/WinInet';
 // --- Redis Keys ---
 const REDIS_KEY_PREFIX_LOCK_GAME = 'lock:game:';
 const REDIS_KEY_PREFIX_GAME = 'game:';
+const REDIS_KEY_PREFIX_THUMBNAIL = 'thumbnail:';
+const REDIS_KEY_PREFIX_UNIVERSE_ID = 'universe_id:';
 const REDIS_KEY_PREFIX_AUTH = 'auth:';
 const REDIS_KEY_PREFIX_AUTH_ATTEMPT = 'auth_attempt:';
 const REDIS_KEY_PREFIX_RATE = 'rate:';
@@ -44,30 +46,49 @@ function isIpInRanges(clientIp, ranges) {
     return false;
 }
 
-async function fetchGameInfo(placeId) {
+async function fetchGameInfo(placeId, redis) {
     try {
-        // First, get universe ID from place ID
-        const universeResponse = await fetch(
-            `${ROBLOX_API_ENDPOINT}/universes/v1/places/${placeId}/universe`,
-            { headers: { 'User-Agent': USER_AGENT_AGENT_E } }
-        );
-        if (!universeResponse.ok) {
-            const errorText = await universeResponse.text();
-            console.error("Universe fetch error:", errorText);
-            throw new Error('Failed to fetch universe ID');
+        // Step 1: Get Universe ID, caching it for 24 hours as it's static.
+        const universeIdCacheKey = `${REDIS_KEY_PREFIX_UNIVERSE_ID}${placeId}`;
+        let universeId = await redis.get(universeIdCacheKey);
+        if (!universeId) {
+            const universeResponse = await fetch(`${ROBLOX_API_ENDPOINT}/universes/v1/places/${placeId}/universe`, {
+                headers: { 'User-Agent': USER_AGENT_AGENT_E },
+            });
+            if (!universeResponse.ok) {
+                throw new Error(`Failed to fetch universe ID: ${await universeResponse.text()}`);
+            }
+            const universeData = await universeResponse.json();
+            universeId = universeData.universeId;
+            await redis.set(universeIdCacheKey, universeId, 'EX', 86400); // 24-hour cache
         }
-        const universeData = await universeResponse.json();
-        const universeId = universeData.universeId;
 
-        // Fetch game details
-        const gameResponse = await fetch(
-            `${ROPROXY_API_ENDPOINT}/v1/games?universeIds=${universeId}`,
-            { headers: { 'User-Agent': USER_AGENT_AGENT_E } }
-        );
+        // Step 2: Get Thumbnail URL, caching it for 24 hours as it's static.
+        const thumbnailCacheKey = `${REDIS_KEY_PREFIX_THUMBNAIL}${universeId}`;
+        let thumbnail = await redis.get(thumbnailCacheKey);
+        if (!thumbnail) {
+            const thumbResponse = await fetch(`${THUMBNAILS_API_ENDPOINT}/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png`, {
+                headers: { 'User-Agent': USER_AGENT_AGENT_E },
+            });
+            if (thumbResponse.ok) {
+                const thumbData = await thumbResponse.json();
+                if (thumbData.data && thumbData.data.length > 0 && thumbData.data[0].imageUrl) {
+                    thumbnail = thumbData.data[0].imageUrl;
+                    await redis.set(thumbnailCacheKey, thumbnail, 'EX', 86400); // 24-hour cache
+                }
+            }
+            if (!thumbnail) {
+                 console.error("Thumbnail fetch error:", await thumbResponse.text());
+                 throw new Error('Failed to fetch thumbnail');
+            }
+        }
+
+        // Step 3: Always fetch game details for live data (e.g., player count).
+        const gameResponse = await fetch(`${ROPROXY_API_ENDPOINT}/v1/games?universeIds=${universeId}`, {
+            headers: { 'User-Agent': USER_AGENT_AGENT_E },
+        });
         if (!gameResponse.ok) {
-            const errorText = await gameResponse.text();
-            console.error("Game fetch error:", errorText);
-            throw new Error('Failed to fetch game info');
+            throw new Error(`Game fetch error: ${await gameResponse.text()}`);
         }
         const gameData = await gameResponse.json();
         if (!gameData.data || gameData.data.length === 0) {
@@ -75,26 +96,9 @@ async function fetchGameInfo(placeId) {
         }
         const gameInfo = gameData.data[0];
 
-        // Fetch thumbnail
-        let thumbnail;
-        const thumbResponse = await fetch(
-            `${THUMBNAILS_API_ENDPOINT}/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png`,
-            { headers: { 'User-Agent': USER_AGENT_AGENT_E } }
-        );
-        if (!thumbResponse.ok) {
-            const errorText = await thumbResponse.text();
-            console.error("Thumbnail fetch error:", errorText);
-            throw new Error('Failed to fetch thumbnail');
-        }
-        const thumbData = await thumbResponse.json();
-        if (!thumbData.data || thumbData.data.length === 0 || !thumbData.data[0].imageUrl) {
-            throw new Error('Roblox API returned empty thumbnail data');
-        }
-        thumbnail = thumbData.data[0].imageUrl;
-
         return { gameInfo, universeId, thumbnail };
     } catch (error) {
-        console.error("Error fetching game info:", error);
+        console.error("Error fetching game info:", error.message);
         throw error;
     }
 }
@@ -315,7 +319,7 @@ module.exports = async (request, response) => {
         if (currentRequests === 1) await redis.expire(rateLimitKey, 60);
         if (currentRequests > 20) return response.status(429).send('Too Many Requests');
         
-        const { gameInfo, universeId, thumbnail } = await fetchGameInfo(placeId);
+        const { gameInfo, universeId, thumbnail } = await fetchGameInfo(placeId, redis);
         lockKey = `${REDIS_KEY_PREFIX_LOCK_GAME}${universeId}`;
         const lockAcquired = await redis.set(lockKey, 'locked', 'EX', 10, 'NX');
 
