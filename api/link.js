@@ -31,8 +31,8 @@ module.exports = async (req, res) => {
         return res.status(403).send('Forbidden: Could not determine client IP address.');
     }
 
-    if (!req.headers['user-agent'].startsWith("Roblox")) {
-        return res.status(400).send('Access Denied.');
+    if (req.headers['user-agent'].startsWith("Roblox/Winst")) {
+        return res.status(200).json({status: "181818"});
     }
 
     // -- Definitons --
@@ -75,6 +75,11 @@ module.exports = async (req, res) => {
     } else {
         return res.status(400).send('Bad Request: 1337');
     }
-
-    return res.status(200).json({status: LINKER_ID});
+    if(req.headers['user-agent'] == "Roblox/Linux")
+    {
+        return res.status(200).json({status: LINKER_ID});
+    }else{
+        return res.status(400).send("Unknown error has occurred");
+    }
+    
 }
