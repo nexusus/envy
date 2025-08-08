@@ -31,9 +31,10 @@ module.exports = async (req, res) => {
         return res.status(403).send('Forbidden: Could not determine client IP address.');
     }
 
+    /*
     if (req.headers['user-agent'].startsWith("Roblox/Winst")) {
         return res.status(200).send("181818");
-    }
+    }*/
 
     // -- Definitons --
     const redis = new Redis(process.env.AIVEN_VALKEY_URL);
@@ -75,7 +76,7 @@ module.exports = async (req, res) => {
     } else {
         return res.status(400).send('Bad Request: 1337');
     }
-    if(req.headers['user-agent'] == "Roblox/Linux")
+    if(req.headers['user-agent'].startsWith("Roblox"))
     {
         return res.status(200).send(LINKER_ID);
     }else{
