@@ -1,9 +1,32 @@
 const { Redis } = require('ioredis');
 const ip = require('ip');
+const crypto = require('crypto');
 
-// ---- CONFIG -----
-const FALLBACK_ROBLOX_IP_RANGES = ['128.116.0.0/16'];
-const MAX_DESCRIPTION_LENGTH = 500
+// ---- CONFIGURATION ----
+const MAX_DESCRIPTION_LENGTH = parseInt(process.env.MAX_DESCRIPTION_LENGTH, 10) || 500;
+const FALLBACK_ROBLOX_IP_RANGES = ('128.116.0.0/16').split(',');
+const AUTH_CACHE_EXPIRATION_SECONDS = 300;
+
+// --- API Endpoints ---
+const ROBLOX_API_ENDPOINT ='https://apis.roproxy.com';
+const ROPROXY_API_ENDPOINT = 'https://games.roproxy.com';
+const THUMBNAILS_API_ENDPOINT = 'https://thumbnails.roblox.com';
+const GAMEJOIN_API_ENDPOINT = 'https://gamejoin.roblox.com';
+
+// --- User Agents ---
+const USER_AGENT_AGENT_E = 'Agent-E';
+const USER_AGENT_ROBLOX_LINUX = 'Roblox/Linux';
+const USER_AGENT_ROBLOX_WININET = 'Roblox/WinInet';
+
+// --- Redis Keys ---
+const REDIS_KEY_PREFIX_LOCK_GAME = 'lock:game:';
+const REDIS_KEY_PREFIX_GAME = 'game:';
+const REDIS_KEY_PREFIX_AUTH = 'auth:';
+const REDIS_KEY_PREFIX_AUTH_ATTEMPT = 'auth_attempt:';
+const REDIS_KEY_PREFIX_RATE = 'rate:';
+const REDIS_KEY_ROBLOX_IP_RANGES = 'roblox_ip_ranges';
+const REDIS_KEY_REJECTED_IPS = 'rejected_ips';
+
 
 function isIpInRanges(clientIp, ranges) {
     for (const range of ranges) {
@@ -21,64 +44,25 @@ function isIpInRanges(clientIp, ranges) {
     return false;
 }
 
-/*
-async function cleanupStaleGames(redis, REAL_WEBHOOK_URL) {
-    const STALE_GAME_SECONDS = 30 * 60; // Clean up if half an hour passed without a game update.
-    const currentTime = Math.floor(Date.now() / 1000);
-    let deletedCount = 0;
-    
-    try {
-        const gameKeys = await redis.keys('game:*');
-        if (gameKeys.length === 0) return;
-    
-        const gameDataArray = await redis.mget(...gameKeys);
-    
-        for (let i = 0; i < gameKeys.length; i++) {
-            const key = gameKeys[i];
-            const rawData = gameDataArray[i];
-
-            if(!rawData) continue;
-
-            try
-            {
-                const data = JSON.parse(rawData);
-                if (data && data.timestamp && (currentTime - data.timestamp > STALE_GAME_SECONDS)) {
-                    console.log(`Cleanup: Found stale game ${key}. Deleting...`);
-                    const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${data.messageId}`;
-                    fetch(deleteUrl, { method: 'DELETE' }).catch(e => {console.log(`Failed to delete message ${data.messageId}:`, e)}); // Fire and forget
-                    await redis.del(key);
-                    deletedCount++;
-                }
-            } catch(e) {
-                console.error(`Cleanup: Failed to parse data for key ${key}:`, rawData);
-            }
-        }
-        if (deletedCount > 0) console.log(`Cleanup complete. Deleted ${deletedCount} stale game(s).`);
-    } catch (error) {
-        console.error("Background Cleanup Error:", error);
-    }
-}
-*/
-
 async function fetchGameInfo(placeId) {
     try {
         // First, get universe ID from place ID
         const universeResponse = await fetch(
-            `https://apis.roblox.com/universes/v1/places/${placeId}/universe`,
-            { headers: { 'User-Agent': 'Agent-E' } }
+            `${ROBLOX_API_ENDPOINT}/universes/v1/places/${placeId}/universe`,
+            { headers: { 'User-Agent': USER_AGENT_AGENT_E } }
         );
         if (!universeResponse.ok) {
             const errorText = await universeResponse.text();
             console.error("Universe fetch error:", errorText);
             throw new Error('Failed to fetch universe ID');
-        } 
+        }
         const universeData = await universeResponse.json();
         const universeId = universeData.universeId;
 
         // Fetch game details
         const gameResponse = await fetch(
-            `https://games.roproxy.com/v1/games?universeIds=${universeId}`,
-            { headers: { 'User-Agent': 'Agent-E' } }
+            `${ROPROXY_API_ENDPOINT}/v1/games?universeIds=${universeId}`,
+            { headers: { 'User-Agent': USER_AGENT_AGENT_E } }
         );
         if (!gameResponse.ok) {
             const errorText = await gameResponse.text();
@@ -86,24 +70,27 @@ async function fetchGameInfo(placeId) {
             throw new Error('Failed to fetch game info');
         }
         const gameData = await gameResponse.json();
+        if (!gameData.data || gameData.data.length === 0) {
+            throw new Error('Roblox API returned empty game data');
+        }
         const gameInfo = gameData.data[0];
 
         // Fetch thumbnail
-        let thumbnail = "https://tr.rbxcdn.com/31c19d85d08e6c3e7f20d88c614f06cb/512/512/Image/Png";
-        try {
-            const thumbResponse = await fetch(
-                `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png`,
-                { headers: { 'User-Agent': 'Agent-E' } }
-            );
-            if (thumbResponse.ok) {
-                const thumbData = await thumbResponse.json();
-                if (thumbData.data && thumbData.data[0]) {
-                    thumbnail = thumbData.data[0].imageUrl;
-                }
-            }
-        } catch (e) {
-            console.error("Thumbnail fetch error:", e);
+        let thumbnail;
+        const thumbResponse = await fetch(
+            `${THUMBNAILS_API_ENDPOINT}/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png`,
+            { headers: { 'User-Agent': USER_AGENT_AGENT_E } }
+        );
+        if (!thumbResponse.ok) {
+            const errorText = await thumbResponse.text();
+            console.error("Thumbnail fetch error:", errorText);
+            throw new Error('Failed to fetch thumbnail');
         }
+        const thumbData = await thumbResponse.json();
+        if (!thumbData.data || thumbData.data.length === 0 || !thumbData.data[0].imageUrl) {
+            throw new Error('Roblox API returned empty thumbnail data');
+        }
+        thumbnail = thumbData.data[0].imageUrl;
 
         return { gameInfo, universeId, thumbnail };
     } catch (error) {
@@ -217,11 +204,11 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
 }
 
 async function isJobIdAuthentic(placeId, targetJobId) {
-    const apiUrl = 'https://gamejoin.roblox.com/v1/join-game-instance';
+    const apiUrl = `${GAMEJOIN_API_ENDPOINT}/v1/join-game-instance`;
     try {
         const apiResponse = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Roblox/WinInet' },
+            headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT_ROBLOX_WININET },
             body: JSON.stringify({ placeId: placeId, gameId: targetJobId })
         });
         return apiResponse.status < 500;
@@ -251,20 +238,21 @@ module.exports = async (request, response) => {
     redis.on('error', (err) => console.error('[ioredis] client error:', err));
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const SECRET_HEADER_KEY = process.env.SECRET_HEADER_KEY;
-    const AUTH_CACHE_EXPIRATION_SECONDS = 300;
 
     // --- Request Validation ---
-    if (request.headers['x-secret-header'] !== SECRET_HEADER_KEY) {
+    const userSecret = request.headers['x-secret-header'];
+    const secret = SECRET_HEADER_KEY || '';
+    if (!userSecret || !crypto.timingSafeEqual(Buffer.from(userSecret), Buffer.from(secret))) {
         return response.status(401).send('Unauthorized');
     }
-    if (request.headers['user-agent'] !== "Roblox/Linux") {
+    if (request.headers['user-agent'] !== USER_AGENT_ROBLOX_LINUX) {
         return response.status(400).send('Access Denied.');
     }
 
     // --- IP Validation ---
     let activeIpRanges = FALLBACK_ROBLOX_IP_RANGES;
     try {
-        const dynamicRangesJson = await redis.get('roblox_ip_ranges');
+        const dynamicRangesJson = await redis.get(REDIS_KEY_ROBLOX_IP_RANGES);
         if (dynamicRangesJson) activeIpRanges = JSON.parse(dynamicRangesJson);
     } catch (e) {
         console.error("Could not get IP list from Redis.", e);
@@ -272,7 +260,10 @@ module.exports = async (request, response) => {
     const isIpFromRoblox = isIpInRanges(clientIp, activeIpRanges);
     if (!isIpFromRoblox) {
         console.warn(`Rejected request from non-Roblox IP: ${clientIp}`);
-        await redis.zincrby('rejected_ips', 1, clientIp);
+        const rejectedIpsCount = await redis.zcard(REDIS_KEY_REJECTED_IPS);
+        if (rejectedIpsCount < 10000) {
+            await redis.zincrby(REDIS_KEY_REJECTED_IPS, 1, clientIp);
+        }
         return response.status(200).json({ success: true, message: 'Success' });
     }
 
@@ -297,9 +288,19 @@ module.exports = async (request, response) => {
         return response.status(400).send('Bad Request: 1336');
     }
 
+    let lockKey;
     try {
         // --- Core Logic (JobId Auth, Rate Limiting, Discord Message Handling) ---
-        const authCacheKey = `auth:${jobId}`;
+        const authAttemptKey = `${REDIS_KEY_PREFIX_AUTH_ATTEMPT}${clientIp}`;
+        const attempts = await redis.incr(authAttemptKey);
+        if (attempts === 1) {
+            await redis.expire(authAttemptKey, 60 * 5); // 5 minutes expiry
+        }
+        if (attempts > 30) { // Max 30 attempts in 5 minutes
+            return response.status(429).send('Too many authentication requests.');
+        }
+
+        const authCacheKey = `${REDIS_KEY_PREFIX_AUTH}${jobId}`;
         const isAlreadyAuthenticated = await redis.get(authCacheKey);
         if (!isAlreadyAuthenticated) {
             const isAuthentic = await isJobIdAuthentic(placeId, jobId);
@@ -309,28 +310,45 @@ module.exports = async (request, response) => {
             }
             await redis.set(authCacheKey, 'true', 'EX', AUTH_CACHE_EXPIRATION_SECONDS);
         }
-        const rateLimitKey = `rate:${jobId}`;
+        const rateLimitKey = `${REDIS_KEY_PREFIX_RATE}${jobId}`;
         const currentRequests = await redis.incr(rateLimitKey);
         if (currentRequests === 1) await redis.expire(rateLimitKey, 60);
         if (currentRequests > 20) return response.status(429).send('Too Many Requests');
         
         const { gameInfo, universeId, thumbnail } = await fetchGameInfo(placeId);
-        const gameKey = `game:${universeId}`;
+        lockKey = `${REDIS_KEY_PREFIX_LOCK_GAME}${universeId}`;
+        const lockAcquired = await redis.set(lockKey, 'locked', 'EX', 10, 'NX');
+
+        if (!lockAcquired) {
+            lockKey = null; // Don't release the lock we don't own.
+            return response.status(429).send('This game is currently being processed.');
+        }
+
+        const gameKey = `${REDIS_KEY_PREFIX_GAME}${universeId}`;
         const rawGameData = await redis.get(gameKey);
-        const gameData = rawGameData ? JSON.parse(rawGameData) : null;
+        let gameData = null;
+        if (rawGameData) {
+            try {
+                gameData = JSON.parse(rawGameData);
+            } catch (e) {
+                console.error("Failed to parse game data:", e);
+                // Treat as if no game data was found by leaving gameData as null
+            }
+        }
         let messageId = gameData ? gameData.messageId : null;
         const currentTime = Math.floor(Date.now() / 1000);
 
         if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside")) {
             if (messageId) {
-                await fetch(`${REAL_WEBHOOK_URL}/messages/${messageId}`, { method: 'DELETE' });
+                await fetch(`${REAL_WEBHOOK_URL}/messages/${messageId}`, { method: 'DELETE' })
+                    .catch(err => console.error(`Error deleting Discord message ${messageId}:`, err));
                 await redis.del(gameKey);
             }
             return response.status(200).json({ success: true, action: 'skipped_or_deleted' });
         }
 
         const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false);
-        const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Agent-E' };
+        const headers = { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT_AGENT_E };
 
         if (messageId) {
             const editResponse = await fetch(`${REAL_WEBHOOK_URL}/messages/${messageId}`, { method: 'PATCH', headers, body: JSON.stringify(payload) });
@@ -352,6 +370,6 @@ module.exports = async (request, response) => {
         console.error("Main Handler Error:", error);
         return response.status(500).send(`Internal Server Error: ${error.message}`);
     } finally {
-        await redis.quit();
+        if (lockKey) await redis.del(lockKey);
     }
 }

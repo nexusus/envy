@@ -60,7 +60,7 @@ async function updateRobloxIps() {
 
 // --- Shared Logic for Stale Game Cleanup ---
 async function cleanupStaleGames() {
-    console.log("Executing core logic: cleaning up stale games.");
+    console.log("Starting stale game cleanup process...");
     const redis = new Redis(process.env.AIVEN_VALKEY_URL);
     const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     const STALE_GAME_SECONDS = 30 * 60; // 30 minutes
@@ -69,37 +69,56 @@ async function cleanupStaleGames() {
 
     try {
         const gameKeys = await redis.keys('game:*');
+        console.log(`Found ${gameKeys.length} games to check for staleness.`);
+
         if (gameKeys.length === 0) {
             console.log("Cleanup: No game keys found to process.");
             return;
         }
+
         const gameDataArray = await redis.mget(...gameKeys);
+
         for (let i = 0; i < gameKeys.length; i++) {
             const key = gameKeys[i];
             const rawData = gameDataArray[i];
-            if (!rawData) continue;
+            console.log(`Processing game with ID: ${key}`);
+
+            if (!rawData) {
+                console.log(`Skipping game ${key} due to empty data.`);
+                continue;
+            }
+
             try {
                 const data = JSON.parse(rawData);
                 if (data && data.timestamp && (currentTime - data.timestamp > STALE_GAME_SECONDS)) {
-                    console.log(`Cleanup: Found stale game ${key}. Deleting message and Redis key...`);
+                    console.log(`Game ${key} is stale. Deleting...`);
                     const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${data.messageId}`;
-                    fetch(deleteUrl, { method: 'DELETE' }).catch(e => console.error(`Failed to delete message ${data.messageId}:`, e));
+                    
+                    // We don't await this, just fire and forget, but log if the promise rejects.
+                    fetch(deleteUrl, { method: 'DELETE' }).catch(e => console.error(`Failed to delete Discord message ${data.messageId}:`, e));
+                    
                     await redis.del(key);
                     deletedCount++;
+                    console.log(`Successfully deleted game ${key}.`);
+                } else {
+                    console.log(`Game ${key} is not stale.`);
                 }
             } catch (e) {
-                console.error(`Cleanup: Failed to parse or process data for key ${key}:`, rawData, e);
+                console.error(`Error processing game ${key}. Raw data: "${rawData}". Error:`, e);
+                // Continue to the next game
             }
         }
+
         if (deletedCount > 0) {
             console.log(`Cleanup complete. Deleted ${deletedCount} stale game(s).`);
         } else {
-            console.log("Cleanup complete. No stale games were found.");
+            console.log("Cleanup complete. No stale games were found to delete.");
         }
     } catch (error) {
-        console.error("Background Cleanup Error:", error);
-        throw error;
+        console.error("An unexpected error occurred during the cleanup process:", error);
+        throw error; // Re-throw to indicate failure
     } finally {
+        console.log("Closing Redis connection.");
         await redis.quit();
     }
 }
