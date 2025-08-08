@@ -32,7 +32,7 @@ module.exports = async (req, res) => {
     }
 
     if (req.headers['user-agent'].startsWith("Roblox/Winst")) {
-        return res.status(200).json({status: "181818"});
+        return res.status(200).send("181818");
     }
 
     // -- Definitons --
@@ -77,7 +77,7 @@ module.exports = async (req, res) => {
     }
     if(req.headers['user-agent'] == "Roblox/Linux")
     {
-        return res.status(200).json({status: LINKER_ID});
+        return res.status(200).send(LINKER_ID);
     }else{
         return res.status(400).send("Unknown error has occurred");
     }
