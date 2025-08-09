@@ -1,8 +1,5 @@
 const { Redis } = require('ioredis');
 
-// --- Shared Logic for IP Updates ---
-const { Redis } = require('ioredis');
-
 const BGPVIEW_URL = 'https://api.bgpview.io/asn/22697/prefixes'; // Roblox ASN
 const AWS_IP_RANGES_URL = 'https://ip-ranges.amazonaws.com/ip-ranges.json';
 
