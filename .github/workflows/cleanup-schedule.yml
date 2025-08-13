@@ -20,5 +20,5 @@ jobs:
       - name: Trigger Vercel Cleanup Endpoint
         run: |
           curl --request GET \
-          --url 'https://envy-xi/api/run-cleanup' \
+          --url 'https://envy-xi.vercel.app/api/run-cleanup' \
           --header 'Authorization: Bearer ${{ secrets.CRON_SECRET }}'
