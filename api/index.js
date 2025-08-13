@@ -2,34 +2,74 @@ const { Redis } = require('ioredis');
 const ip = require('ip');
 const crypto = require('crypto');
 
+// --- Initialization ---
+const redis = new Redis(process.env.AIVEN_VALKEY_URL);
+redis.on('error', (err) => console.error('[ioredis] client error:', err));
+
 // ---- CONFIGURATION ----
-const MAX_DESCRIPTION_LENGTH = parseInt(process.env.MAX_DESCRIPTION_LENGTH, 10) || 500;
-const FALLBACK_ROBLOX_IP_RANGES = ('128.116.0.0/16').split(',');
+const MAX_DESCRIPTION_LENGTH        = parseInt(process.env.MAX_DESCRIPTION_LENGTH, 10) || 500;
+const FALLBACK_ROBLOX_IP_RANGES     = ('128.116.0.0/16').split(',');
 const AUTH_CACHE_EXPIRATION_SECONDS = 300;
 
 // --- API Endpoints ---
-const ROBLOX_API_ENDPOINT ='https://apis.roblox.com';
-const ROPROXY_API_ENDPOINT = 'https://games.roproxy.com';
-const THUMBNAILS_API_ENDPOINT = 'https://thumbnails.roblox.com';
-const GAMEJOIN_API_ENDPOINT = 'https://gamejoin.roblox.com';
+const ROBLOX_API_ENDPOINT       = 'https://apis.roblox.com';
+const ROPROXY_API_ENDPOINT      = 'https://games.roproxy.com';
+const THUMBNAILS_API_ENDPOINT   = 'https://thumbnails.roblox.com';
+const GAMEJOIN_API_ENDPOINT     = 'https://gamejoin.roblox.com';
 
 // --- User Agents ---
-const USER_AGENT_AGENT_E = 'Agent-E';
-const USER_AGENT_ROBLOX_LINUX = 'Roblox/Linux';
+const USER_AGENT_AGENT_E        = 'Agent-E';
+const USER_AGENT_ROBLOX_LINUX   = 'Roblox/Linux';
 const USER_AGENT_ROBLOX_WININET = 'Roblox/WinInet';
 
 // --- Redis Keys ---
-const REDIS_KEY_PREFIX_LOCK_GAME = 'lock:game:';
-const REDIS_KEY_PREFIX_GAME = 'game:';
-const REDIS_KEY_PREFIX_THUMBNAIL = 'thumbnail:';
-const REDIS_KEY_PREFIX_UNIVERSE_ID = 'universe_id:';
-const REDIS_KEY_PREFIX_AUTH = 'auth:';
+const REDIS_KEY_PREFIX_LOCK_GAME    = 'lock:game:';
+const REDIS_KEY_PREFIX_GAME         = 'game:';
+const REDIS_KEY_PREFIX_THUMBNAIL    = 'thumbnail:';
+const REDIS_KEY_PREFIX_UNIVERSE_ID  = 'universe_id:';
+const REDIS_KEY_PREFIX_AUTH         = 'auth:';
 const REDIS_KEY_PREFIX_AUTH_ATTEMPT = 'auth_attempt:';
-const REDIS_KEY_PREFIX_RATE = 'rate:';
-const REDIS_KEY_ROBLOX_IP_RANGES = 'roblox_ip_ranges';
-const REDIS_KEY_REJECTED_IPS = 'rejected_ips';
+const REDIS_KEY_PREFIX_RATE         = 'rate:';
+const REDIS_KEY_ROBLOX_IP_RANGES    = 'roblox_ip_ranges';
+const REDIS_KEY_REJECTED_IPS        = 'rejected_ips';
 
 
+// --- CONSTANTS ---
+const FORUM_WEBHOOK_URL     = process.env.FORUM_WEBHOOK_URL;
+const SECRET_HEADER_KEY     = process.env.SECRET_HEADER_KEY;
+const THREAD_ID_VERY_LOW    = process.env.THREAD_ID_VERY_LOW;
+const THREAD_ID_LOW         = process.env.THREAD_ID_LOW;
+const THREAD_ID_MEDIUM      = process.env.THREAD_ID_MEDIUM;
+const THREAD_ID_HIGH        = process.env.THREAD_ID_HIGH;
+const THREAD_ID_ENVIOUS     = process.env.THREAD_ID_ENVIOUS;
+
+const REQUIRED_ENV_VARS = [
+'AIVEN_VALKEY_URL',
+'FORUM_WEBHOOK_URL',
+'SECRET_HEADER_KEY',
+'THREAD_ID_VERY_LOW',
+'THREAD_ID_LOW',
+'THREAD_ID_MEDIUM',
+'THREAD_ID_HIGH',
+'THREAD_ID_ENVIOUS'
+];
+
+for (const envVar of REQUIRED_ENV_VARS) {
+if (!process.env[envVar]) {
+    throw new Error(`Missing required environment variable: ${envVar}`);
+}
+}
+
+// --- Functions ---
+
+function getThreadId(playerCount) {
+    if (playerCount === 1) return THREAD_ID_VERY_LOW;
+    if (playerCount >= 2 && playerCount <= 5) return THREAD_ID_LOW;
+    if (playerCount >= 6 && playerCount <= 50) return THREAD_ID_MEDIUM;
+    if (playerCount >= 51 && playerCount <= 500) return THREAD_ID_HIGH;
+    if (playerCount > 500) return THREAD_ID_ENVIOUS;
+    return null; // No thread for other player counts
+}
 function isIpInRanges(clientIp, ranges) {
     for (const range of ranges) {
         try {
@@ -187,8 +227,7 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
                            `:crossed_swords: **Genre**: \`${gameInfo.genre}\`\n` +
                            `:notepad_spiral: **Description**: \`\`\`${description}\`\`\`\n` +
                            `:date: **Last Game Update**: \`${formatDate(gameInfo.updated)}\`\n` +
-                           `:zap: **Javascript Join Code**: \`\`\`js\nRoblox.GameLauncher.joinGameInstance(${placeId}, "")\`\`\`\n`+
-                           `\`\`\`${JobId}\`\`\``+ (isNonHttp ?  
+                           `:zap: **Javascript Join Code**: \`\`\`js\nRoblox.GameLauncher.joinGameInstance(${placeId}, "${JobId}")\`\`\`\n`+ (isNonHttp ?  
                            `\n## :warning: WARNING: This game is non-HTTP Enabled and may provide inaccurate data.` : ""),
                     inline: true
                 },
@@ -222,9 +261,6 @@ async function isJobIdAuthentic(placeId, targetJobId) {
     }
 }
 
-
-
-
 module.exports = async (request, response) => {
     // Vercel: Check method
     if (request.method !== 'POST') {
@@ -236,12 +272,6 @@ module.exports = async (request, response) => {
     if (!clientIp) {
         return response.status(403).send('Forbidden: Could not determine client IP address.');
     }
-
-    // --- Environment and Connection Setup ---
-    const redis = new Redis(process.env.AIVEN_VALKEY_URL);
-    redis.on('error', (err) => console.error('[ioredis] client error:', err));
-    const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
-    const SECRET_HEADER_KEY = process.env.SECRET_HEADER_KEY;
 
     // --- Request Validation ---
     const userSecret = request.headers['x-secret-header'];
@@ -288,7 +318,7 @@ module.exports = async (request, response) => {
         return response.status(400).send('Bad Request: 1337');
     }
     const jobId = body.jobId;
-    if (!jobId || !placeId) {
+    if (!jobId) {
         return response.status(400).send('Bad Request: 1336');
     }
 
@@ -340,11 +370,14 @@ module.exports = async (request, response) => {
             }
         }
         let messageId = gameData ? gameData.messageId : null;
+        let threadId = gameData ? gameData.threadId : null;
         const currentTime = Math.floor(Date.now() / 1000);
+        const newThreadId = getThreadId(gameInfo.playing);
 
-        if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside")) {
+        if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside") || !newThreadId) {
             if (messageId) {
-                await fetch(`${REAL_WEBHOOK_URL}/messages/${messageId}`, { method: 'DELETE' })
+                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
+                await fetch(deleteUrl, { method: 'DELETE' })
                     .catch(err => console.error(`Error deleting Discord message ${messageId}:`, err));
                 await redis.del(gameKey);
             }
@@ -354,19 +387,35 @@ module.exports = async (request, response) => {
         const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false);
         const headers = { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT_AGENT_E };
 
-        if (messageId) {
-            const editResponse = await fetch(`${REAL_WEBHOOK_URL}/messages/${messageId}`, { method: 'PATCH', headers, body: JSON.stringify(payload) });
-            if (!editResponse.ok && editResponse.status === 404) messageId = null;
+        if (messageId && threadId === newThreadId) {
+            const editUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
+            const editResponse = await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(payload) });
+            if (!editResponse.ok && editResponse.status === 404) {
+                messageId = null;
+            }
+        } else {
+            if (messageId) {
+                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
+                await fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting Discord message ${messageId}:`, err));
+            }
+            messageId = null;
         }
+        
         if (!messageId) {
-            const createResponse = await fetch(`${REAL_WEBHOOK_URL}?wait=true`, { method: 'POST', headers, body: JSON.stringify(payload) });
+            const createUrl = `${FORUM_WEBHOOK_URL}?wait=true&thread_id=${newThreadId}`;
+            const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
             if (!createResponse.ok) throw new Error(`Discord API Error on POST: ${createResponse.status}`);
             const responseData = await createResponse.json();
             messageId = responseData.id;
+            threadId = newThreadId;
         }
 
-        const newGameData = { messageId: messageId, timestamp: currentTime, placeId: placeId };
-        await redis.set(gameKey, JSON.stringify(newGameData));
+        const newGameData = { messageId: messageId, threadId: threadId, timestamp: currentTime, placeId: placeId };
+        // Use a pipeline to set the game data and add to the sorted set atomically
+        const pipeline = redis.pipeline();
+        pipeline.set(gameKey, JSON.stringify(newGameData));
+        pipeline.zadd('games_by_timestamp', currentTime, gameKey);
+        await pipeline.exec();
 
         return response.status(200).json({ success: true, messageId: messageId });
 

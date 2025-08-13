@@ -59,52 +59,54 @@ async function updateRobloxIps() {
 async function cleanupStaleGames() {
     console.log("Starting stale game cleanup process...");
     const redis = new Redis(process.env.AIVEN_VALKEY_URL);
-    const REAL_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+    const FORUM_WEBHOOK_URL = process.env.FORUM_WEBHOOK_URL;
     const STALE_GAME_SECONDS = 30 * 60; // 30 minutes
     const currentTime = Math.floor(Date.now() / 1000);
+    const staleThreshold = currentTime - STALE_GAME_SECONDS;
+    const trackingSetKey = 'games_by_timestamp';
     let deletedCount = 0;
 
     try {
-        const gameKeys = await redis.keys('game:*');
-        console.log(`Found ${gameKeys.length} games to check for staleness.`);
+        // Fetch stale game keys from the sorted set. This is much more efficient than KEYS.
+        const staleGameKeys = await redis.zrangebyscore(trackingSetKey, 0, staleThreshold);
+        console.log(`Found ${staleGameKeys.length} games to check for staleness.`);
 
-        if (gameKeys.length === 0) {
-            console.log("Cleanup: No game keys found to process.");
+        if (staleGameKeys.length === 0) {
+            console.log("Cleanup: No stale games found to process.");
             return;
         }
 
-        const gameDataArray = await redis.mget(...gameKeys);
+        const gameDataArray = await redis.mget(...staleGameKeys);
+        const pipeline = redis.pipeline();
 
-        for (let i = 0; i < gameKeys.length; i++) {
-            const key = gameKeys[i];
+        for (let i = 0; i < staleGameKeys.length; i++) {
+            const key = staleGameKeys[i];
             const rawData = gameDataArray[i];
-            console.log(`Processing game with ID: ${key}`);
-
+            
             if (!rawData) {
-                console.log(`Skipping game ${key} due to empty data.`);
+                console.log(`Skipping game ${key} due to empty data, removing from tracking set.`);
+                pipeline.zrem(trackingSetKey, key); // Clean up from sorted set
                 continue;
             }
 
             try {
                 const data = JSON.parse(rawData);
-                if (data && data.timestamp && (currentTime - data.timestamp > STALE_GAME_SECONDS)) {
-                    console.log(`Game ${key} is stale. Deleting...`);
-                    const deleteUrl = `${REAL_WEBHOOK_URL}/messages/${data.messageId}`;
-                    
-                    // We don't await this, just fire and forget, but log if the promise rejects.
-                    fetch(deleteUrl, { method: 'DELETE' }).catch(e => console.error(`Failed to delete Discord message ${data.messageId}:`, e));
-                    
-                    await redis.del(key);
-                    deletedCount++;
-                    console.log(`Successfully deleted game ${key}.`);
-                } else {
-                    console.log(`Game ${key} is not stale.`);
-                }
+                console.log(`Game ${key} is stale. Deleting...`);
+                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${data.messageId}?thread_id=${data.threadId}`;
+                
+                fetch(deleteUrl, { method: 'DELETE' }).catch(e => console.error(`Failed to delete Discord message ${data.messageId}:`, e));
+                
+                // Add deletion commands to the pipeline
+                pipeline.del(key);
+                pipeline.zrem(trackingSetKey, key);
+                deletedCount++;
             } catch (e) {
                 console.error(`Error processing game ${key}. Raw data: "${rawData}". Error:`, e);
-                // Continue to the next game
             }
         }
+
+        // Execute all deletions in a single atomic operation
+        await pipeline.exec();
 
         if (deletedCount > 0) {
             console.log(`Cleanup complete. Deleted ${deletedCount} stale game(s).`);
