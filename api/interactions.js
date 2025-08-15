@@ -35,85 +35,85 @@ module.exports = async (request, response) => {
         case InteractionType.APPLICATION_COMMAND:
             // Handle slash commands
             if (interaction.data.name === GAMES_COMMAND_NAME) {
-                const userId = interaction.member.user.id;
-                const cooldownKey = `cooldown:${GAMES_COMMAND_NAME}:${userId}`;
-
-                // Immediately defer the response
+                // Immediately defer the response to Discord.
                 response.status(200).json({
                     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-                    data: {
-                        flags: InteractionResponseFlags.EPHEMERAL,
-                    },
+                    data: { flags: InteractionResponseFlags.EPHEMERAL },
                 });
 
-                const onCooldown = await redis.get(cooldownKey);
-                if (onCooldown) {
-                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            content: `You're on cooldown! Please wait a moment before using this command again.`,
-                        }),
-                    });
-                    return;
-                }
+                // --- Fire-and-forget background processing ---
+                (async () => {
+                    const userId = interaction.member.user.id;
+                    const cooldownKey = `cooldown:${GAMES_COMMAND_NAME}:${userId}`;
+                    const followUpUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
 
-                try {
-                    const gameKeys = await redis.zrevrange('games_by_timestamp', 0, 99); // Get the most recent 100 games
-                    if (gameKeys.length === 0) {
-                        await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
+                    try {
+                        const onCooldown = await redis.get(cooldownKey);
+                        if (onCooldown) {
+                            await fetch(followUpUrl, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ content: `You're on cooldown! Please wait a moment.` }),
+                            });
+                            return;
+                        }
+
+                        const gameKeys = await redis.zrevrange('games_by_timestamp', 0, 99);
+                        if (gameKeys.length === 0) {
+                            await fetch(followUpUrl, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ content: 'No game data available right now.' }),
+                            });
+                            return;
+                        }
+
+                        const gameDataRaw = await redis.mget(...gameKeys);
+                        let totalPlayers = 0;
+                        let highestPlayerCount = 0;
+
+                        gameDataRaw.forEach(raw => {
+                            if (raw) {
+                                try {
+                                    const data = JSON.parse(raw);
+                                    totalPlayers += data.playerCount || 0;
+                                    if (data.playerCount > highestPlayerCount) {
+                                        highestPlayerCount = data.playerCount;
+                                    }
+                                } catch (e) {
+                                    console.error("Failed to parse game data for stats:", raw);
+                                }
+                            }
+                        });
+
+                        await redis.set(cooldownKey, 'true', 'EX', COOLDOWN_SECONDS);
+
+                        await fetch(followUpUrl, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content: 'No game data available right now.' }),
+                            body: JSON.stringify({
+                                embeds: [{
+                                    title: "📊 Game Statistics",
+                                    color: parseInt("0x8200c8", 16),
+                                    fields: [
+                                        { name: "Total Games", value: `\`${gameKeys.length}\``, inline: true },
+                                        { name: "Total Players", value: `\`${totalPlayers.toLocaleString()}\``, inline: true },
+                                        { name: "Highest Player Count", value: `\`${highestPlayerCount.toLocaleString()}\``, inline: true },
+                                    ],
+                                    footer: { text: "Envy Serverside" },
+                                    timestamp: new Date().toISOString(),
+                                }],
+                            }),
                         });
-                        return;
+                    } catch (error) {
+                        console.error("Error handling /games command:", error);
+                        await fetch(followUpUrl, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: 'An error occurred while fetching game statistics.' }),
+                        });
                     }
-
-                    const gameDataRaw = await redis.mget(...gameKeys);
-                    let totalPlayers = 0;
-                    let highestPlayerCount = 0;
-
-                    gameDataRaw.forEach(raw => {
-                        if (raw) {
-                            try {
-                                const data = JSON.parse(raw);
-                                totalPlayers += data.playerCount || 0;
-                                if (data.playerCount > highestPlayerCount) {
-                                    highestPlayerCount = data.playerCount;
-                                }
-                            } catch (e) {
-                                console.error("Failed to parse game data for stats:", raw);
-                            }
-                        }
-                    });
-
-                    await redis.set(cooldownKey, 'true', 'EX', COOLDOWN_SECONDS);
-
-                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            embeds: [{
-                                title: "📊 Game Statistics",
-                                color: parseInt("0x8200c8", 16),
-                                fields: [
-                                    { name: "Total Games", value: `\`${gameKeys.length}\``, inline: true },
-                                    { name: "Total Players", value: `\`${totalPlayers.toLocaleString()}\``, inline: true },
-                                    { name: "Highest Player Count", value: `\`${highestPlayerCount.toLocaleString()}\``, inline: true },
-                                ],
-                                footer: { text: "Envy Serverside" },
-                                timestamp: new Date().toISOString(),
-                            }],
-                        }),
-                    });
-                } catch (error) {
-                    console.error("Error handling /games command:", error);
-                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ content: 'An error occurred while fetching game statistics.' }),
-                    });
-                }
+                })(); // Self-invoking async function
             }
             break;
 
@@ -140,76 +140,71 @@ module.exports = async (request, response) => {
                 const isApproving = customId.startsWith(APPROVE_BUTTON_CUSTOM_ID);
                 const gameKey = `game:${universeId}`;
 
-                // Defer the response immediately.
+                // Defer the response immediately to show the loading state on the button.
                 response.status(200).json({
                     type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
                 });
 
-                try {
-                    console.log(`[LOG] Processing action: isApproving=${isApproving}, universeId=${universeId}`);
-                    if (isApproving) {
-                        await redis.sadd('public_games', universeId);
-                        console.log(`[LOG] Added ${universeId} to public_games`);
-                    } else {
-                        await redis.srem('public_games', universeId);
-                        console.log(`[LOG] Removed ${universeId} from public_games`);
-                        
-                        const rawGameData = await redis.get(gameKey);
-                        if (rawGameData) {
-                            const gameData = JSON.parse(rawGameData);
-                            if (gameData.publicMessageId && gameData.publicThreadId) {
-                                // Use the correct Discord API endpoint for deleting webhook messages
-                                const deleteUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${process.env.FORUM_WEBHOOK_TOKEN}/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
-                                
-                                const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
+                // --- Fire-and-forget background processing ---
+                (async () => {
+                    const followUpUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
+                    try {
+                        console.log(`[LOG] Processing action: isApproving=${isApproving}, universeId=${universeId}`);
+                        if (isApproving) {
+                            await redis.sadd('public_games', universeId);
+                            console.log(`[LOG] Added ${universeId} to public_games`);
+                        } else {
+                            await redis.srem('public_games', universeId);
+                            console.log(`[LOG] Removed ${universeId} from public_games`);
 
-                                if (!deleteResponse.ok) {
-                                    const errorBody = await deleteResponse.text();
-                                    console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}. Status: ${deleteResponse.status}, Body: ${errorBody}`);
-                                } else {
-                                    console.log(`[LOG] Successfully deleted public message ${gameData.publicMessageId}`);
+                            const rawGameData = await redis.get(gameKey);
+                            if (rawGameData) {
+                                const gameData = JSON.parse(rawGameData);
+                                if (gameData.publicMessageId && gameData.publicThreadId) {
+                                    const deleteUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${process.env.FORUM_WEBHOOK_TOKEN}/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
+                                    const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
+
+                                    if (!deleteResponse.ok) {
+                                        const errorBody = await deleteResponse.text();
+                                        console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}. Status: ${deleteResponse.status}, Body: ${errorBody}`);
+                                    } else {
+                                        console.log(`[LOG] Successfully deleted public message ${gameData.publicMessageId}`);
+                                    }
+
+                                    gameData.publicMessageId = null;
+                                    gameData.publicThreadId = null;
+                                    await redis.set(gameKey, JSON.stringify(gameData));
+                                    console.log(`[LOG] Cleared public message data for ${universeId}`);
                                 }
-
-                                gameData.publicMessageId = null;
-                                gameData.publicThreadId = null;
-                                await redis.set(gameKey, JSON.stringify(gameData));
-                                console.log(`[LOG] Cleared public message data for ${universeId}`);
                             }
                         }
+
+                        const newButton = isApproving
+                            ? { type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
+                            : { type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}` };
+
+                        await fetch(followUpUrl, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                content: interaction.message.content,
+                                embeds: interaction.message.embeds,
+                                components: [{ type: 1, components: [newButton] }],
+                            }),
+                        });
+
+                    } catch (error) {
+                        console.error("[ERROR] Unhandled exception in button handler:", error);
+                        await fetch(followUpUrl, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                content: 'An unexpected error occurred. This is likely a database connection issue.',
+                                flags: InteractionResponseFlags.EPHEMERAL,
+                            }),
+                        });
                     }
-
-                    const newButton = isApproving ?
-                        { type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` } :
-                        { type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}` };
-
-                    // Follow up with a PATCH request to the original message.
-                    const followUpUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
-                    await fetch(followUpUrl, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            content: interaction.message.content,
-                            embeds: interaction.message.embeds,
-                            components: [{ type: 1, components: [newButton] }],
-                        }),
-                    });
-
-                } catch (error) {
-                    console.error("[ERROR] Unhandled exception in button handler:", error);
-                    // Send a visible error message back to the user.
-                    // Use a follow-up PATCH to send the error message, since we already deferred.
-                    const followUpUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
-                    await fetch(followUpUrl, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            content: 'An unexpected error occurred while processing this action. This is likely a database connection issue.',
-                            flags: InteractionResponseFlags.EPHEMERAL,
-                        }),
-                    });
-                    // We don't return here, as the initial response has been sent.
-                    // We just log the error and let the function end.
-                }
+                })(); // Self-invoking async function
             } else {
                 console.warn(`[WARN] Unhandled button custom_id: ${customId}`);
                 return response.status(200).json({
