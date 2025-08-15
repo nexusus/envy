@@ -146,6 +146,11 @@ module.exports = async (request, response) => {
                 const isApproving = customId.startsWith(APPROVE_BUTTON_CUSTOM_ID);
                 const gameKey = `game:${universeId}`;
 
+                // Defer the response immediately.
+                response.status(200).json({
+                    type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
+                });
+
                 try {
                     console.log(`[LOG] Processing action: isApproving=${isApproving}, universeId=${universeId}`);
                     if (isApproving) {
@@ -170,19 +175,20 @@ module.exports = async (request, response) => {
                         }
                     }
 
-                    const newButton = isApproving ? 
-                        { type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` } : 
+                    const newButton = isApproving ?
+                        { type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` } :
                         { type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}` };
 
-                    // Respond directly with a clean payload
-                    console.log('[LOG] Sending UPDATE_MESSAGE response to Discord.');
-                    return response.status(200).json({
-                        type: InteractionResponseType.UPDATE_MESSAGE,
-                        data: {
+                    // Follow up with a PATCH request to the original message.
+                    const followUpUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
+                    await fetch(followUpUrl, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
                             content: interaction.message.content,
                             embeds: interaction.message.embeds,
                             components: [{ type: 1, components: [newButton] }],
-                        },
+                        }),
                     });
 
                 } catch (error) {
