@@ -1,16 +1,10 @@
 const { verifyKey, InteractionType, InteractionResponseType, InteractionResponseFlags } = require('discord-interactions');
-const { Redis } = require('ioredis');
+const { redis } = require('./lib/redis');
 const { DISCORD_CONSTANTS, COOLDOWN_SECONDS } = require('./lib/config');
 const { GAMES_COMMAND_NAME, APPROVE_BUTTON_CUSTOM_ID, PRIVATIZE_BUTTON_CUSTOM_ID } = DISCORD_CONSTANTS;
 
 // --- Initialization ---
 // Create the Redis client once, outside the handler, to be reused across invocations.
-const redis = new Redis(process.env.AIVEN_VALKEY_URL, {
-    
-    lazyConnect: true,
-    enableReadyCheck: false,
-    maxRetriesPerRequest: 0
-});
 
 // --- Main Handler ---
 module.exports = async (request, response) => {
@@ -194,13 +188,18 @@ module.exports = async (request, response) => {
                 } catch (error) {
                     console.error("[ERROR] Unhandled exception in button handler:", error);
                     // Send a visible error message back to the user.
-                    return response.status(200).json({
-                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                        data: {
-                            content: 'An unexpected error occurred while processing this action.',
+                    // Use a follow-up PATCH to send the error message, since we already deferred.
+                    const followUpUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
+                    await fetch(followUpUrl, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            content: 'An unexpected error occurred while processing this action. This is likely a database connection issue.',
                             flags: InteractionResponseFlags.EPHEMERAL,
-                        },
+                        }),
                     });
+                    // We don't return here, as the initial response has been sent.
+                    // We just log the error and let the function end.
                 }
             } else {
                 console.warn(`[WARN] Unhandled button custom_id: ${customId}`);
