@@ -136,7 +136,7 @@ module.exports = async (request, response) => {
                 }
 
                 const universeId = customId.split('_')[2];
-                const isApproving = customId.startsWith(APPROrove_BUTTON_CUSTOM_ID);
+                const isApproving = customId.startsWith(APPROVE_BUTTON_CUSTOM_ID);
                 const gameKey = `game:${universeId}`;
 
                 console.log(`Button clicked: customId=${customId}, universeId=${universeId}, isApproving=${isApproving}`);
