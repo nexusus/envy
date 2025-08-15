@@ -6,7 +6,7 @@ const { GAMES_COMMAND_NAME, APPROVE_BUTTON_CUSTOM_ID, PRIVATIZE_BUTTON_CUSTOM_ID
 // --- Initialization ---
 // Create the Redis client once, outside the handler, to be reused across invocations.
 const redis = new Redis(process.env.AIVEN_VALKEY_URL, {
-    // These options are recommended for serverless environments
+    
     lazyConnect: true,
     enableReadyCheck: false,
     maxRetriesPerRequest: 0
@@ -202,6 +202,15 @@ module.exports = async (request, response) => {
                         },
                     });
                 }
+            } else {
+                console.warn(`[WARN] Unhandled button custom_id: ${customId}`);
+                return response.status(200).json({
+                    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                    data: {
+                        content: "This button is either unrecognized or has expired.",
+                        flags: InteractionResponseFlags.EPHEMERAL,
+                    },
+                });
             }
             break;
 
