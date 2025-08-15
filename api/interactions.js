@@ -136,8 +136,10 @@ module.exports = async (request, response) => {
                 }
 
                 const universeId = customId.split('_')[2];
-                const isApproving = customId.startsWith(APPROVE_BUTTON_CUSTOM_ID);
+                const isApproving = customId.startsWith(APPROrove_BUTTON_CUSTOM_ID);
                 const gameKey = `game:${universeId}`;
+
+                console.log(`Button clicked: customId=${customId}, universeId=${universeId}, isApproving=${isApproving}`);
 
                 try {
                     if (isApproving) {
@@ -164,6 +166,7 @@ module.exports = async (request, response) => {
                     // Check if the message was sent by the bot itself.
                     // We can't edit messages sent by webhooks.
                     const wasSentByBot = interaction.message.author.id === process.env.DISCORD_APP_ID;
+                    console.log(`Message author ID: ${interaction.message.author.id}, Bot ID: ${process.env.DISCORD_APP_ID}, wasSentByBot: ${wasSentByBot}`);
 
                     if (wasSentByBot) {
                         // If the bot sent it, we can update the button directly.
