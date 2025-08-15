@@ -38,24 +38,35 @@ module.exports = async (request, response) => {
                 const userId = interaction.member.user.id;
                 const cooldownKey = `cooldown:${GAMES_COMMAND_NAME}:${userId}`;
 
+                // Immediately defer the response
+                response.status(200).json({
+                    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+                    data: {
+                        flags: InteractionResponseFlags.EPHEMERAL,
+                    },
+                });
+
                 const onCooldown = await redis.get(cooldownKey);
                 if (onCooldown) {
-                    return response.status(200).json({
-                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                        data: {
+                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
                             content: `You're on cooldown! Please wait a moment before using this command again.`,
-                            flags: InteractionResponseFlags.EPHEMERAL,
-                        },
+                        }),
                     });
+                    return;
                 }
 
                 try {
                     const gameKeys = await redis.zrange('games_by_timestamp', 0, -1);
                     if (gameKeys.length === 0) {
-                        return response.status(200).json({
-                            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                            data: { content: 'No game data available right now.' },
+                        await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: 'No game data available right now.' }),
                         });
+                        return;
                     }
 
                     const gameDataRaw = await redis.mget(...gameKeys);
@@ -78,9 +89,10 @@ module.exports = async (request, response) => {
 
                     await redis.set(cooldownKey, 'true', 'EX', COOLDOWN_SECONDS);
 
-                    return response.status(200).json({
-                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                        data: {
+                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
                             embeds: [{
                                 title: "📊 Game Statistics",
                                 color: parseInt("0x8200c8", 16),
@@ -92,17 +104,14 @@ module.exports = async (request, response) => {
                                 footer: { text: "Envy Serverside" },
                                 timestamp: new Date().toISOString(),
                             }],
-                            flags: InteractionResponseFlags.EPHEMERAL,
-                        },
+                        }),
                     });
                 } catch (error) {
                     console.error("Error handling /games command:", error);
-                    return response.status(200).json({
-                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                        data: {
-                            content: 'An error occurred while fetching game statistics.',
-                            flags: InteractionResponseFlags.EPHEMERAL,
-                        },
+                    await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: 'An error occurred while fetching game statistics.' }),
                     });
                 }
             }
