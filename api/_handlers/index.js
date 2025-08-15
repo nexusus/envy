@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { redis } = require('./lib/redis');
+const { redis } = require('../lib/redis');
 const {
     FALLBACK_ROBLOX_IP_RANGES,
     AUTH_CACHE_EXPIRATION_SECONDS,
@@ -12,10 +12,10 @@ const {
     MODERATION_CHANNEL_ID,
     SECRET_HEADER_KEY,
     DISCORD_CONSTANTS
-} = require('./lib/config');
-const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage } = require('./lib/discord-helpers');
-const { fetchGameInfo, isJobIdAuthentic } = require('./lib/roblox-service');
-const { getThreadId, isIpInRanges } = require('./lib/utils');
+} = require('../lib/config');
+const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage } = require('../lib/discord-helpers');
+const { fetchGameInfo, isJobIdAuthentic } = require('../lib/roblox-service');
+const { getThreadId, isIpInRanges } = require('../lib/utils');
 
 // --- Initialization ---
 

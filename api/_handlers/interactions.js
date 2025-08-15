@@ -1,6 +1,6 @@
 const { verifyKey, InteractionType, InteractionResponseType, InteractionResponseFlags } = require('discord-interactions');
-const { redis } = require('./lib/redis');
-const { DISCORD_CONSTANTS, COOLDOWN_SECONDS } = require('./lib/config');
+const { redis } = require('../lib/redis');
+const { DISCORD_CONSTANTS, COOLDOWN_SECONDS } = require('../lib/config');
 const { GAMES_COMMAND_NAME, APPROVE_BUTTON_CUSTOM_ID, PRIVATIZE_BUTTON_CUSTOM_ID } = DISCORD_CONSTANTS;
 
 // --- Initialization ---
