@@ -1,5 +1,6 @@
 const { verifyKey, InteractionType, InteractionResponseType, InteractionResponseFlags } = require('discord-interactions');
 const { redis } = require('../lib/redis');
+const { deleteDiscordMessage } = require('../lib/discord-helpers');
 const { DISCORD_CONSTANTS, COOLDOWN_SECONDS } = require('../lib/config');
 const { GAMES_COMMAND_NAME, APPROVE_BUTTON_CUSTOM_ID, PRIVATIZE_BUTTON_CUSTOM_ID } = DISCORD_CONSTANTS;
 
@@ -161,14 +162,11 @@ module.exports = async (request, response) => {
                             if (rawGameData) {
                                 const gameData = JSON.parse(rawGameData);
                                 if (gameData.publicMessageId && gameData.publicThreadId) {
-                                    const deleteUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${process.env.FORUM_WEBHOOK_TOKEN}/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
-                                    const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
-
-                                    if (!deleteResponse.ok) {
-                                        const errorBody = await deleteResponse.text();
-                                        console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}. Status: ${deleteResponse.status}, Body: ${errorBody}`);
-                                    } else {
+                                    const wasDeleted = await deleteDiscordMessage(gameData.publicThreadId, gameData.publicMessageId);
+                                    if (wasDeleted) {
                                         console.log(`[LOG] Successfully deleted public message ${gameData.publicMessageId}`);
+                                    } else {
+                                        console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}. The helper function already logged the details.`);
                                     }
 
                                     gameData.publicMessageId = null;
