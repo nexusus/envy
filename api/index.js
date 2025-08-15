@@ -164,6 +164,7 @@ module.exports = async (request, response) => {
                 ]
             }];
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
+            console.log("--- MODERATION PAYLOAD ---", JSON.stringify(moderationPayload, null, 2));
 
             if (moderationMessageId) { // If it's already in moderation, just edit the message.
                 const editUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
