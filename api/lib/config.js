@@ -1,7 +1,6 @@
 // --- Environment Variable Validation ---
 const REQUIRED_ENV_VARS = [
     'AIVEN_VALKEY_URL',
-    'FORUM_WEBHOOK_URL',
     'SECRET_HEADER_KEY',
     'THREAD_ID_VERY_LOW',
     'THREAD_ID_LOW',
@@ -9,7 +8,6 @@ const REQUIRED_ENV_VARS = [
     'THREAD_ID_HIGH',
     'THREAD_ID_ENVIOUS',
     'DISCORD_PUBLIC_KEY',
-    'MODERATION_WEBHOOK_URL',
     'DISCORD_APP_ID',
     'DISCORD_BOT_TOKEN',
     'MODERATION_CHANNEL_ID'
@@ -40,7 +38,6 @@ const AWS_IP_RANGES_URL = 'https://ip-ranges.amazonaws.com/ip-ranges.json';
 // --- User Agents ---
 const USER_AGENT_AGENT_E = 'Agent-E';
 const USER_AGENT_ROBLOX_LINUX = 'Roblox/Linux';
-const USER_AGENT_ROBLOX_WININET = 'Roblox/WinInet';
 
 // --- Redis Keys ---
 const REDIS_KEYS = {
@@ -64,10 +61,6 @@ const DISCORD_CONSTANTS = {
     PRIVATIZE_BUTTON_CUSTOM_ID: 'privatize_game',
     GAMES_COMMAND_NAME: 'games'
 };
-
-// --- Webhook URLs ---
-const FORUM_WEBHOOK_URL = process.env.FORUM_WEBHOOK_URL;
-const MODERATION_WEBHOOK_URL = process.env.MODERATION_WEBHOOK_URL;
 
 // --- Channel IDs ---
 const MODERATION_CHANNEL_ID = process.env.MODERATION_CHANNEL_ID;
@@ -100,11 +93,8 @@ module.exports = {
     AWS_IP_RANGES_URL,
     USER_AGENT_AGENT_E,
     USER_AGENT_ROBLOX_LINUX,
-    USER_AGENT_ROBLOX_WININET,
     REDIS_KEYS,
     DISCORD_CONSTANTS,
-    FORUM_WEBHOOK_URL,
-    MODERATION_WEBHOOK_URL,
     MODERATION_CHANNEL_ID,
     THREAD_IDS,
     SECRET_HEADER_KEY,

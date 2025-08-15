@@ -7,8 +7,6 @@ const {
     USER_AGENT_ROBLOX_LINUX,
     USER_AGENT_AGENT_E,
     REDIS_KEYS,
-    FORUM_WEBHOOK_URL,
-    MODERATION_WEBHOOK_URL,
     MODERATION_CHANNEL_ID,
     SECRET_HEADER_KEY,
     DISCORD_CONSTANTS
@@ -137,8 +135,7 @@ module.exports = async (request, response) => {
         const newPublicThreadId = getThreadId(gameInfo.playing);
         if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside") || !newPublicThreadId) {
             if (publicMessageId && publicThreadId) {
-                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
-                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${publicMessageId} during filter cleanup:`, err));
+                await deleteDiscordMessage(publicThreadId, publicMessageId);
             }
             if (moderationMessageId) {
                 await deleteDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId);
@@ -171,8 +168,7 @@ module.exports = async (request, response) => {
 
             // If the game just became a moderation game, we must delete its old public message.
             if (!wasModerationGame && publicMessageId && publicThreadId) {
-                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
-                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${publicMessageId} on transition to moderation:`, err));
+                await deleteDiscordMessage(publicThreadId, publicMessageId);
                 publicMessageId = null;
                 publicThreadId = null;
             }

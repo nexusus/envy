@@ -1,6 +1,5 @@
 const { Redis } = require('ioredis');
 const {
-    FORUM_WEBHOOK_URL,
     REDIS_KEYS,
     BGPVIEW_URL,
     AWS_IP_RANGES_URL,
@@ -64,7 +63,6 @@ async function updateRobloxIps() {
 async function cleanupStaleGames() {
     console.log("Starting stale game cleanup process...");
     const redis = new Redis(process.env.AIVEN_VALKEY_URL);
-    const FORUM_WEBHOOK_URL = process.env.FORUM_WEBHOOK_URL;
     const STALE_GAME_SECONDS = 30 * 60; // 30 minutes
     const currentTime = Math.floor(Date.now() / 1000);
     const staleThreshold = currentTime - STALE_GAME_SECONDS;
@@ -100,12 +98,10 @@ async function cleanupStaleGames() {
 
                 // Attempt to delete the public message if it exists
                 if (data.publicMessageId && data.publicThreadId) {
-                    const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${data.publicMessageId}?thread_id=${data.publicThreadId}`;
-                    console.log(`Game ${key} is stale. Attempting to delete public Discord message ${data.publicMessageId}...`);
-                    const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
-                    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+                    const wasDeleted = await deleteDiscordMessage(data.publicThreadId, data.publicMessageId);
+                    if (!wasDeleted) {
                         allMessagesDeleted = false;
-                        console.error(`Failed to delete stale public message ${data.publicMessageId}. Status: ${deleteResponse.status}.`);
+                        console.error(`Failed to delete stale public message ${data.publicMessageId}.`);
                     }
                 }
 
@@ -155,9 +151,6 @@ async function cleanupStaleGames() {
 // --- Comprehensive Discord Message Cleanup ---
 async function cleanupOrphanedMessages() {
     console.log("Starting comprehensive cleanup of orphaned Discord messages...");
-    const FORUM_WEBHOOK_URL = process.env.FORUM_WEBHOOK_URL;
-    // This is a critical assumption about the webhook URL structure.
-    const WEBHOOK_ID = FORUM_WEBHOOK_URL.split('/')[5]; 
     const STALE_MESSAGE_MINUTES = 30;
     const staleTimestamp = Date.now() - (STALE_MESSAGE_MINUTES * 60 * 1000);
     let deletedCount = 0;
@@ -171,11 +164,6 @@ async function cleanupOrphanedMessages() {
         process.env.THREAD_ID_ENVIOUS
     ].filter(id => id); // Filter out any undefined/empty IDs
 
-    if (!WEBHOOK_ID) {
-        console.error("Could not extract webhook ID from FORUM_WEBHOOK_URL. Skipping orphaned message cleanup.");
-        return;
-    }
-    
     if (!process.env.DISCORD_BOT_TOKEN) {
         console.error("DISCORD_BOT_TOKEN is not set. Skipping orphaned message cleanup as it's required to list messages.");
         return;
@@ -197,17 +185,12 @@ async function cleanupOrphanedMessages() {
             const messages = await response.json();
             
             for (const message of messages) {
-                // Check if the message is from our specific webhook and is older than the stale threshold.
-                if (message.webhook_id === WEBHOOK_ID && new Date(message.timestamp).getTime() < staleTimestamp) {
+                // Check if the message is from our bot and is older than the stale threshold.
+                if (message.author.bot && new Date(message.timestamp).getTime() < staleTimestamp) {
                     console.log(`Found orphaned/stale message ${message.id} in thread ${threadId}. Deleting...`);
-                    // We use the webhook here to delete the message, as it's generally more reliable for messages created by it.
-                    const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${message.id}?thread_id=${threadId}`;
-                    const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
-                    
-                    if (deleteResponse.ok || deleteResponse.status === 404) {
+                    const wasDeleted = await deleteDiscordMessage(threadId, message.id);
+                    if (wasDeleted) {
                         deletedCount++;
-                    } else {
-                        console.error(`Failed to delete stale message ${message.id}. Status: ${deleteResponse.status}`);
                     }
                 }
             }
