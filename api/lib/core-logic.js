@@ -3,8 +3,10 @@ const {
     FORUM_WEBHOOK_URL,
     REDIS_KEYS,
     BGPVIEW_URL,
-    AWS_IP_RANGES_URL
+    AWS_IP_RANGES_URL,
+    MODERATION_CHANNEL_ID
 } = require('./config');
+const { deleteDiscordMessage } = require('./discord-helpers');
 
 async function updateRobloxIps() {
     console.log("Executing SECURE core logic: fetching Roblox ASN and specific AWS service IPs.");
@@ -109,12 +111,11 @@ async function cleanupStaleGames() {
 
                 // Attempt to delete the moderation message if it exists
                 if (data.moderationMessageId) {
-                    const deleteUrl = `${process.env.MODERATION_WEBHOOK_URL}/messages/${data.moderationMessageId}`;
                     console.log(`Game ${key} is stale. Attempting to delete moderation Discord message ${data.moderationMessageId}...`);
-                    const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
-                    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+                    const wasDeleted = await deleteDiscordMessage(MODERATION_CHANNEL_ID, data.moderationMessageId);
+                    if (!wasDeleted) {
                         allMessagesDeleted = false;
-                        console.error(`Failed to delete stale moderation message ${data.moderationMessageId}. Status: ${deleteResponse.status}.`);
+                        console.error(`Failed to delete stale moderation message ${data.moderationMessageId}.`);
                     }
                 }
 

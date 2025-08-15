@@ -9,9 +9,10 @@ const {
     REDIS_KEYS,
     FORUM_WEBHOOK_URL,
     MODERATION_WEBHOOK_URL,
+    MODERATION_CHANNEL_ID,
     SECRET_HEADER_KEY
 } = require('./lib/config');
-const { createDiscordEmbed } = require('./lib/discord-helpers');
+const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage } = require('./lib/discord-helpers');
 const { fetchGameInfo, isJobIdAuthentic } = require('./lib/roblox-service');
 const { getThreadId, isIpInRanges } = require('./lib/utils');
 
@@ -140,8 +141,7 @@ module.exports = async (request, response) => {
                 fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${publicMessageId} during filter cleanup:`, err));
             }
             if (moderationMessageId) {
-                const deleteUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
-                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting moderation message ${moderationMessageId} during filter cleanup:`, err));
+                await deleteDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId);
             }
             await redis.del(gameKey);
             return response.status(200).json({ success: true, action: 'skipped_or_deleted' });
@@ -166,13 +166,10 @@ module.exports = async (request, response) => {
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
 
             if (moderationMessageId) { // If it's already in moderation, just edit the message.
-                const editUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
-                await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(moderationPayload) });
+                await editDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload);
             } else { // If it just crossed the threshold, create a new moderation message.
-                const createUrl = `${MODERATION_WEBHOOK_URL}?wait=true`;
-                const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(moderationPayload) });
-                if (createResponse.ok) {
-                    const responseData = await createResponse.json();
+                const responseData = await sendDiscordMessage(MODERATION_CHANNEL_ID, moderationPayload);
+                if (responseData) {
                     moderationMessageId = responseData.id;
                 }
             }
@@ -185,8 +182,7 @@ module.exports = async (request, response) => {
             }
         } else if (wasModerationGame && !isModerationGame) {
             // If the game drops below the player threshold, remove it from moderation.
-            const deleteUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
-            fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting moderation message ${moderationMessageId} on transition to public:`, err));
+            await deleteDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId);
             moderationMessageId = null;
         }
 

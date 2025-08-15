@@ -95,4 +95,83 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
     };
 }
 
-module.exports = { createDiscordEmbed };
+async function sendDiscordMessage(channelId, payload) {
+    const url = `https://discord.com/api/v10/channels/${channelId}/messages`;
+    const headers = {
+        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Envy-Bot (https://github.com/nexus-devs/envy, 1.0.0)'
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error(`Discord API Error (${response.status}): ${errorBody}`);
+            return null;
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to send Discord message:', error);
+        return null;
+    }
+}
+
+async function editDiscordMessage(channelId, messageId, payload) {
+    const url = `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`;
+    const headers = {
+        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Envy-Bot (https://github.com/nexus-devs/envy, 1.0.0)'
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: headers,
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error(`Discord API Error on edit (${response.status}): ${errorBody}`);
+            return null;
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to edit Discord message:', error);
+        return null;
+    }
+}
+
+async function deleteDiscordMessage(channelId, messageId) {
+    const url = `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}`;
+    const headers = {
+        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        'User-Agent': 'Envy-Bot (https://github.com/nexus-devs/envy, 1.0.0)'
+    };
+
+    try {
+        const response = await fetch(url, { method: 'DELETE', headers: headers });
+        // A 204 No Content is a successful deletion.
+        if (response.ok || response.status === 204) {
+            return true;
+        }
+        // It's common for messages to be already deleted, so we treat 404 as a success.
+        if (response.status === 404) {
+            console.log(`Message ${messageId} was already deleted.`);
+            return true;
+        }
+        const errorBody = await response.text();
+        console.error(`Discord API Error on delete (${response.status}): ${errorBody}`);
+        return false;
+    } catch (error) {
+        console.error('Failed to delete Discord message:', error);
+        return false;
+    }
+}
+
+module.exports = { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage };
