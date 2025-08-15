@@ -1,0 +1,177 @@
+const { verifyKey, InteractionType, InteractionResponseType, InteractionResponseFlags } = require('discord-interactions');
+const { Redis } = require('ioredis');
+const { DISCORD_CONSTANTS, COOLDOWN_SECONDS } = require('./lib/config');
+const { GAMES_COMMAND_NAME, APPROVE_BUTTON_CUSTOM_ID, PRIVATIZE_BUTTON_CUSTOM_ID } = DISCORD_CONSTANTS;
+
+// --- Initialization ---
+const redis = new Redis(process.env.AIVEN_VALKEY_URL);
+
+// --- Main Handler ---
+module.exports = async (request, response) => {
+    // 1. Verify the request is from Discord
+    const signature = request.headers['x-signature-ed25519'];
+    const timestamp = request.headers['x-signature-timestamp'];
+    const rawBody = JSON.stringify(request.body);
+
+    const isValidRequest = verifyKey(
+        Buffer.from(rawBody),
+        signature,
+        timestamp,
+        process.env.DISCORD_PUBLIC_KEY
+    );
+
+    if (!isValidRequest) {
+        console.error('Invalid request signature');
+        return response.status(401).send('Bad request signature');
+    }
+
+    // 2. Handle the interaction type
+    const interaction = request.body;
+    switch (interaction.type) {
+        case InteractionType.PING:
+            // The PING message is used during the initial webhook validation.
+            return response.status(200).json({ type: InteractionResponseType.PONG });
+
+        case InteractionType.APPLICATION_COMMAND:
+            // Handle slash commands
+            if (interaction.data.name === GAMES_COMMAND_NAME) {
+                const userId = interaction.member.user.id;
+                const cooldownKey = `cooldown:${GAMES_COMMAND_NAME}:${userId}`;
+
+                const onCooldown = await redis.get(cooldownKey);
+                if (onCooldown) {
+                    return response.status(200).json({
+                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                        data: {
+                            content: `You're on cooldown! Please wait a moment before using this command again.`,
+                            flags: InteractionResponseFlags.EPHEMERAL,
+                        },
+                    });
+                }
+
+                try {
+                    const gameKeys = await redis.zrange('games_by_timestamp', 0, -1);
+                    if (gameKeys.length === 0) {
+                        return response.status(200).json({
+                            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                            data: { content: 'No game data available right now.' },
+                        });
+                    }
+
+                    const gameDataRaw = await redis.mget(...gameKeys);
+                    let totalPlayers = 0;
+                    let highestPlayerCount = 0;
+
+                    gameDataRaw.forEach(raw => {
+                        if (raw) {
+                            try {
+                                const data = JSON.parse(raw);
+                                totalPlayers += data.playerCount || 0;
+                                if (data.playerCount > highestPlayerCount) {
+                                    highestPlayerCount = data.playerCount;
+                                }
+                            } catch (e) {
+                                console.error("Failed to parse game data for stats:", raw);
+                            }
+                        }
+                    });
+
+                    await redis.set(cooldownKey, 'true', 'EX', COOLDOWN_SECONDS);
+
+                    return response.status(200).json({
+                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                        data: {
+                            embeds: [{
+                                title: "📊 Game Statistics",
+                                color: parseInt("0x8200c8", 16),
+                                fields: [
+                                    { name: "Total Games", value: `\`${gameKeys.length}\``, inline: true },
+                                    { name: "Total Players", value: `\`${totalPlayers.toLocaleString()}\``, inline: true },
+                                    { name: "Highest Player Count", value: `\`${highestPlayerCount.toLocaleString()}\``, inline: true },
+                                ],
+                                footer: { text: "Envy Serverside" },
+                                timestamp: new Date().toISOString(),
+                            }],
+                            flags: InteractionResponseFlags.EPHEMERAL,
+                        },
+                    });
+                } catch (error) {
+                    console.error("Error handling /games command:", error);
+                    return response.status(200).json({
+                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                        data: {
+                            content: 'An error occurred while fetching game statistics.',
+                            flags: InteractionResponseFlags.EPHEMERAL,
+                        },
+                    });
+                }
+            }
+            break;
+
+        case InteractionType.MESSAGE_COMPONENT:
+            // Handle button clicks
+            const customId = interaction.data.custom_id;
+            if (customId.startsWith(APPROVE_BUTTON_CUSTOM_ID) || customId.startsWith(PRIVATIZE_BUTTON_CUSTOM_ID)) {
+                // Permissions check: only allow administrators
+                const permissions = interaction.member.permissions;
+                const isAdmin = (BigInt(permissions) & 8n) === 8n; // 8n is the bitfield for Administrator
+
+                if (!isAdmin) {
+                    return response.status(200).json({
+                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                        data: {
+                            content: "You don't have permission to use this button.",
+                            flags: InteractionResponseFlags.EPHEMERAL,
+                        },
+                    });
+                }
+
+                const universeId = customId.split('_')[2];
+                const isApproving = customId.startsWith(APPROVE_BUTTON_CUSTOM_ID);
+
+                try {
+                    if (isApproving) {
+                        await redis.sadd('public_games', universeId);
+                    } else {
+                        await redis.srem('public_games', universeId);
+                        // Optional: Find and delete the public message if you store that reference
+                    }
+
+                    // Update the button on the original message
+                    const newButton = isApproving ? {
+                        type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}`
+                    } : {
+                        type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}`
+                    };
+                    
+                    const updatedMessage = {
+                        ...interaction.message,
+                        components: [{ type: 1, components: [newButton] }],
+                    };
+
+                    return response.status(200).json({
+                        type: InteractionResponseType.UPDATE_MESSAGE,
+                        data: updatedMessage,
+                    });
+
+                } catch (error) {
+                    console.error("Error handling button interaction:", error);
+                    return response.status(200).json({
+                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                        data: {
+                            content: 'An error occurred while processing this action.',
+                            flags: InteractionResponseFlags.EPHEMERAL,
+                        },
+                    });
+                }
+            }
+            break;
+
+        default:
+            console.warn(`Unhandled interaction type: ${interaction.type}`);
+            return response.status(400).send('Unhandled interaction type');
+    }
+
+    // Fallback for unhandled cases
+    return response.status(400).send('Bad Request');
+};
