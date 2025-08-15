@@ -167,21 +167,17 @@ module.exports = async (request, response) => {
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
 
             if (moderationMessageId) {
-                const editUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
-                const editResponse = await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(moderationPayload) });
-                if (!editResponse.ok && editResponse.status === 404) {
-                    moderationMessageId = null; // Message was deleted, so recreate.
+                const editSuccessful = await editDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload);
+                if (!editSuccessful) {
+                    // If the edit fails (e.g., message was deleted), clear the ID to force recreation.
+                    moderationMessageId = null;
                 }
             }
             
-            if (!moderationMessageId) { // If no message exists or was just deleted, create one.
-                const createUrl = `${MODERATION_WEBHOOK_URL}?wait=true`;
-                const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(moderationPayload) });
-                if (createResponse.ok) {
-                    const responseData = await createResponse.json();
+            if (!moderationMessageId) { // If no message exists or the edit failed, create a new one.
+                const responseData = await sendDiscordMessage(MODERATION_CHANNEL_ID, moderationPayload);
+                if (responseData) {
                     moderationMessageId = responseData.id;
-                } else {
-                    console.error(`Discord API Error on POST to moderation webhook: ${createResponse.status}, ${await createResponse.text()}`);
                 }
             }
             // If the game just became a moderation game, we must delete its old public message.
