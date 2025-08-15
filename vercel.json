@@ -6,6 +6,10 @@
       "destination": "/api/link"
     },
     {
+      "source": "/interactions",
+      "destination": "/api/interactions"
+    },
+    {
       "source": "/(.*)",
       "destination": "/api/index"
     }
