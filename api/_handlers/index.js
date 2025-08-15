@@ -161,7 +161,7 @@ module.exports = async (request, response) => {
                 type: 1,
                 components: [
                     isPublic
-                        ? { type: 2, style: 2, label: 'Privatize', custom_id: `${DISCORD_CONSTANTS.PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
+                        ? { type: 2, style: 1, label: 'Privatize', custom_id: `${DISCORD_CONSTANTS.PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
                         : { type: 2, style: 3, label: 'Approve', custom_id: `${DISCORD_CONSTANTS.APPROVE_BUTTON_CUSTOM_ID}_${universeId}` }
                 ]
             }];

@@ -184,7 +184,7 @@ module.exports = async (request, response) => {
                         }
 
                         const newButton = isApproving
-                            ? { type: 2, style: 2, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
+                            ? { type: 2, style: 1, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
                             : { type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}` };
 
                         await fetch(followUpUrl, {
