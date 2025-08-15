@@ -1,8 +1,9 @@
 const { Redis } = require('ioredis');
 const {
+    FORUM_WEBHOOK_URL,
+    REDIS_KEYS,
     BGPVIEW_URL,
-    AWS_IP_RANGES_URL,
-    REDIS_KEYS
+    AWS_IP_RANGES_URL
 } = require('./config');
 
 async function updateRobloxIps() {

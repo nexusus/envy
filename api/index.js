@@ -1,5 +1,4 @@
 const { Redis } = require('ioredis');
-const ip = require('ip');
 const crypto = require('crypto');
 const {
     FALLBACK_ROBLOX_IP_RANGES,
@@ -9,16 +8,16 @@ const {
     USER_AGENT_AGENT_E,
     REDIS_KEYS,
     FORUM_WEBHOOK_URL,
+    MODERATION_WEBHOOK_URL,
     SECRET_HEADER_KEY
 } = require('./lib/config');
-
-// --- Initialization ---
-const redis = new Redis(process.env.AIVEN_VALKEY_URL);
-redis.on('error', (err) => console.error('[ioredis] client error:', err));
 const { createDiscordEmbed } = require('./lib/discord-helpers');
 const { fetchGameInfo, isJobIdAuthentic } = require('./lib/roblox-service');
 const { getThreadId, isIpInRanges } = require('./lib/utils');
 
+// --- Initialization ---
+const redis = new Redis(process.env.AIVEN_VALKEY_URL);
+redis.on('error', (err) => console.error('[ioredis] client error:', err));
 
 module.exports = async (request, response) => {
     // Vercel: Check method
@@ -125,7 +124,6 @@ module.exports = async (request, response) => {
                 gameData = JSON.parse(rawGameData);
             } catch (e) {
                 console.error("Failed to parse game data:", e);
-                // Treat as if no game data was found by leaving gameData as null
             }
         }
         let messageId = gameData ? gameData.messageId : null;
@@ -138,7 +136,7 @@ module.exports = async (request, response) => {
                 const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
                 const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
                 if (deleteResponse.ok || deleteResponse.status === 404) {
-                    await redis.del(gameKey); // Only delete from Redis if Discord deletion is confirmed
+                    await redis.del(gameKey);
                 } else {
                     console.error(`Error deleting Discord message ${messageId} during game update check. Status: ${deleteResponse.status}.`);
                 }
@@ -146,69 +144,27 @@ module.exports = async (request, response) => {
             return response.status(200).json({ success: true, action: 'skipped_or_deleted' });
         }
 
-        const payload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false);
         const headers = { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT_AGENT_E };
-
-        if (messageId && threadId === newThreadId) {
-            const editUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
-            const editResponse = await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(payload) });
-            if (!editResponse.ok && editResponse.status === 404) {
-                messageId = null;
-            }
-        } else {
-            if (messageId) {
-                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
-                // We don't need to await this one fully because if it fails, the logic below will create a new message anyway.
-                // The primary goal here is to remove the old message when the thread changes. The cleanup job will catch any orphans.
-                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting Discord message ${messageId} during thread change:`, err));
-            }
-            messageId = null;
-        }
-        
-        if (!messageId) {
-            const createUrl = `${FORUM_WEBHOOK_URL}?wait=true&thread_id=${newThreadId}`;
-            const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(payload) });
-            if (!createResponse.ok) throw new Error(`Discord API Error on POST: ${createResponse.status}`);
-            const responseData = await createResponse.json();
-            messageId = responseData.id;
-            threadId = newThreadId;
-        }
-
-        // --- MODERATION & PUBLIC LOGIC ---
         const isPublic = await redis.sismember(REDIS_KEYS.PUBLIC_GAMES_SET, universeId);
+        const isModerationGame = gameInfo.playing > MODERATION_THRESHOLD;
 
-        // 1. Handle games destined for the moderation channel
-        if (gameInfo.playing > MODERATION_THRESHOLD) {
+        if (isModerationGame) {
             const isAlreadyModerated = await redis.sismember(REDIS_KEYS.MODERATED_GAMES_SET, universeId);
-            const moderationWebhookUrl = process.env.MODERATION_WEBHOOK_URL;
-            if (!moderationWebhookUrl) {
-                console.error("MODERATION_WEBHOOK_URL is not set. Cannot post to moderation channel.");
-            } else {
+            if (MODERATION_WEBHOOK_URL) {
                 const components = [{
-                    type: 1, // Action Row
+                    type: 1,
                     components: [
-                        isPublic ? {
-                            type: 2, // Button
-                            style: 4, // Red (Danger)
-                            label: 'Privatize',
-                            custom_id: `privatize_game_${universeId}`
-                        } : {
-                            type: 2, // Button
-                            style: 3, // Green (Success)
-                            label: 'Approve',
-                            custom_id: `approve_game_${universeId}`
-                        }
+                        isPublic ? { type: 2, style: 4, label: 'Privatize', custom_id: `privatize_game_${universeId}` }
+                                 : { type: 2, style: 3, label: 'Approve', custom_id: `approve_game_${universeId}` }
                     ]
                 }];
                 const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
                 
                 if (isAlreadyModerated && messageId) {
-                    // Edit existing message in moderation channel
-                    const editUrl = `${moderationWebhookUrl}/messages/${messageId}`;
+                    const editUrl = `${MODERATION_WEBHOOK_URL}/messages/${messageId}`;
                     await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(moderationPayload) });
                 } else {
-                    // Post new message to moderation channel
-                    const createUrl = `${moderationWebhookUrl}?wait=true`;
+                    const createUrl = `${MODERATION_WEBHOOK_URL}?wait=true`;
                     const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(moderationPayload) });
                     if (createResponse.ok) {
                         const responseData = await createResponse.json();
@@ -218,9 +174,8 @@ module.exports = async (request, response) => {
                 }
             }
         }
-
-        // 2. Handle games for the public channels
-        if (isPublic || gameInfo.playing <= MODERATION_THRESHOLD) {
+        
+        if (!isModerationGame || isPublic) {
             const publicPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false);
             if (messageId && threadId === newThreadId) {
                 const editUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
@@ -246,7 +201,6 @@ module.exports = async (request, response) => {
             }
         }
 
-        // 3. Always update the central game data record
         const newGameData = {
             messageId: messageId,
             threadId: threadId,
@@ -257,7 +211,7 @@ module.exports = async (request, response) => {
         };
         const pipeline = redis.pipeline();
         pipeline.set(gameKey, JSON.stringify(newGameData));
-        pipeline.zadd('games_by_timestamp', currentTime, gameKey);
+        pipeline.zadd(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, currentTime, gameKey);
         await pipeline.exec();
 
         return response.status(200).json({ success: true, messageId: messageId });
@@ -268,4 +222,4 @@ module.exports = async (request, response) => {
     } finally {
         if (lockKey) await redis.del(lockKey);
     }
-}
+};

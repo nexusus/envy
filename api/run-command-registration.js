@@ -1,19 +1,21 @@
-require('dotenv').config();
-
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
-const { DISCORD_CONSTANTS } = require('./lib/config');
 
 const commands = [
     {
-        name: DISCORD_CONSTANTS.GAMES_COMMAND_NAME,
+        name: 'games',
         description: 'Displays live statistics about the games being tracked.',
     },
 ];
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+module.exports = async (request, response) => {
+    // Security check: Only run if a secret is provided in the query string
+    if (request.query.secret !== process.env.CRON_SECRET) {
+        return response.status(401).send('Unauthorized');
+    }
 
-(async () => {
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+
     try {
         console.log('Started refreshing application (/) commands.');
 
@@ -23,7 +25,9 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
         );
 
         console.log('Successfully reloaded application (/) commands.');
+        return response.status(200).send('Commands registered successfully!');
     } catch (error) {
         console.error(error);
+        return response.status(500).send('Failed to register commands.');
     }
-})();
+};
