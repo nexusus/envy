@@ -59,7 +59,7 @@ module.exports = async (request, response) => {
                 }
 
                 try {
-                    const gameKeys = await redis.zrange('games_by_timestamp', 0, -1);
+                    const gameKeys = await redis.zrevrange('games_by_timestamp', 0, 99); // Get the most recent 100 games
                     if (gameKeys.length === 0) {
                         await fetch(`https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`, {
                             method: 'PATCH',
@@ -159,7 +159,7 @@ module.exports = async (request, response) => {
                             const gameData = JSON.parse(rawGameData);
                             if (gameData.publicMessageId && gameData.publicThreadId) {
                                 const deleteUrl = `${process.env.FORUM_WEBHOOK_URL}/messages/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
-                                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}:`, err));
+                                await fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}:`, err));
                                 
                                 gameData.publicMessageId = null;
                                 gameData.publicThreadId = null;

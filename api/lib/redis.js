@@ -7,6 +7,7 @@ const redis = new Redis(process.env.AIVEN_VALKEY_URL, {
   connectTimeout: 10000, // 10 seconds
   lazyConnect: true, // Don't connect until the first command is sent
   enableOfflineQueue: false, // Fail fast if the connection is down
+  showFriendlyErrorStack: true, // Provide more detailed error messages
 });
 
 redis.on('error', (err) => console.error('[ioredis] client error:', err));
