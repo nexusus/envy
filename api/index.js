@@ -198,28 +198,22 @@ module.exports = async (request, response) => {
             
             // If the thread has changed, we must delete the old message and create a new one.
             if (publicMessageId && publicThreadId !== newPublicThreadId) {
-                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
-                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${publicMessageId} during thread change:`, err));
-                publicMessageId = null; 
+                await deleteDiscordMessage(publicThreadId, publicMessageId);
+                publicMessageId = null;
             }
 
             if (publicMessageId) { // If thread is the same, just edit.
-                const editUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
-                const editResponse = await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(publicPayload) });
-                if (!editResponse.ok && editResponse.status === 404) {
+                const editSuccessful = await editDiscordMessage(publicThreadId, publicMessageId, publicPayload);
+                if (!editSuccessful) {
                     publicMessageId = null; // Message was deleted manually, so we'll recreate it.
                 }
             }
-            
+
             if (!publicMessageId) { // If no message exists (or was just deleted), create one.
-                const createUrl = `${FORUM_WEBHOOK_URL}?wait=true&thread_id=${newPublicThreadId}`;
-                const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(publicPayload) });
-                if (createResponse.ok) {
-                    const responseData = await createResponse.json();
+                const responseData = await sendDiscordMessage(newPublicThreadId, publicPayload);
+                if (responseData) {
                     publicMessageId = responseData.id;
                     publicThreadId = newPublicThreadId;
-                } else {
-                    console.error(`Discord API Error on POST: ${createResponse.status}`);
                 }
             }
         }

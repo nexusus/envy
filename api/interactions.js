@@ -158,9 +158,18 @@ module.exports = async (request, response) => {
                         if (rawGameData) {
                             const gameData = JSON.parse(rawGameData);
                             if (gameData.publicMessageId && gameData.publicThreadId) {
-                                const deleteUrl = `${process.env.FORUM_WEBHOOK_URL}/messages/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
-                                await fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}:`, err));
+                                // Use the correct Discord API endpoint for deleting webhook messages
+                                const deleteUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${process.env.FORUM_WEBHOOK_TOKEN}/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
                                 
+                                const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
+
+                                if (!deleteResponse.ok) {
+                                    const errorBody = await deleteResponse.text();
+                                    console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}. Status: ${deleteResponse.status}, Body: ${errorBody}`);
+                                } else {
+                                    console.log(`[LOG] Successfully deleted public message ${gameData.publicMessageId}`);
+                                }
+
                                 gameData.publicMessageId = null;
                                 gameData.publicThreadId = null;
                                 await redis.set(gameKey, JSON.stringify(gameData));
