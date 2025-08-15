@@ -128,13 +128,28 @@ module.exports = async (request, response) => {
 
                 const universeId = customId.split('_')[2];
                 const isApproving = customId.startsWith(APPROVE_BUTTON_CUSTOM_ID);
+                const gameKey = `game:${universeId}`;
 
                 try {
                     if (isApproving) {
                         await redis.sadd('public_games', universeId);
                     } else {
                         await redis.srem('public_games', universeId);
-                        // Optional: Find and delete the public message if you store that reference
+                        
+                        // When privatizing, we must immediately delete the public message.
+                        const rawGameData = await redis.get(gameKey);
+                        if (rawGameData) {
+                            const gameData = JSON.parse(rawGameData);
+                            if (gameData.publicMessageId && gameData.publicThreadId) {
+                                const deleteUrl = `${process.env.FORUM_WEBHOOK_URL}/messages/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
+                                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${gameData.publicMessageId} on privatize:`, err));
+                                
+                                // Remove public data from Redis to prevent re-creation
+                                gameData.publicMessageId = null;
+                                gameData.publicThreadId = null;
+                                await redis.set(gameKey, JSON.stringify(gameData));
+                            }
+                        }
                     }
 
                     // Update the button on the original message

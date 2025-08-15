@@ -94,22 +94,38 @@ async function cleanupStaleGames() {
 
             try {
                 const data = JSON.parse(rawData);
-                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${data.messageId}?thread_id=${data.threadId}`;
-                
-                console.log(`Game ${key} is stale. Attempting to delete Discord message ${data.messageId}...`);
-                const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
+                let allMessagesDeleted = true;
 
-                // Proceed if Discord confirms the deletion (204 No Content) or if the message was already gone (404 Not Found)
-                if (deleteResponse.ok || deleteResponse.status === 404) {
-                    console.log(`Discord message ${data.messageId} deleted or already gone. Removing game from database.`);
-                    // Add deletion commands to the pipeline ONLY if Discord confirmation is received
+                // Attempt to delete the public message if it exists
+                if (data.publicMessageId && data.publicThreadId) {
+                    const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${data.publicMessageId}?thread_id=${data.publicThreadId}`;
+                    console.log(`Game ${key} is stale. Attempting to delete public Discord message ${data.publicMessageId}...`);
+                    const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
+                    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+                        allMessagesDeleted = false;
+                        console.error(`Failed to delete stale public message ${data.publicMessageId}. Status: ${deleteResponse.status}.`);
+                    }
+                }
+
+                // Attempt to delete the moderation message if it exists
+                if (data.moderationMessageId) {
+                    const deleteUrl = `${process.env.MODERATION_WEBHOOK_URL}/messages/${data.moderationMessageId}`;
+                    console.log(`Game ${key} is stale. Attempting to delete moderation Discord message ${data.moderationMessageId}...`);
+                    const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
+                    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+                        allMessagesDeleted = false;
+                        console.error(`Failed to delete stale moderation message ${data.moderationMessageId}. Status: ${deleteResponse.status}.`);
+                    }
+                }
+
+                // Only remove the game from the database if we successfully deleted all its associated messages.
+                if (allMessagesDeleted) {
+                    console.log(`All Discord messages for game ${key} deleted or already gone. Removing game from database.`);
                     pipeline.del(key);
                     pipeline.zrem(trackingSetKey, key);
                     deletedCount++;
                 } else {
-                    // If Discord returns an error (e.g., rate limit, server error), we log it and do NOT delete the game data.
-                    // This allows the job to retry on the next run.
-                    console.error(`Failed to delete Discord message ${data.messageId}. Status: ${deleteResponse.status}. Game data will be kept for the next retry.`);
+                    console.error(`Could not delete all messages for game ${key}. It will be retried on the next run.`);
                 }
             } catch (e) {
                 console.error(`Error processing game ${key}. Raw data: "${rawData}". Error:`, e);
@@ -146,6 +162,7 @@ async function cleanupOrphanedMessages() {
     let deletedCount = 0;
 
     const threadIds = [
+        process.env.MODERATION_CHANNEL_ID, // Add the moderation channel to the cleanup list
         process.env.THREAD_ID_VERY_LOW,
         process.env.THREAD_ID_LOW,
         process.env.THREAD_ID_MEDIUM,

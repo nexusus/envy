@@ -126,84 +126,108 @@ module.exports = async (request, response) => {
                 console.error("Failed to parse game data:", e);
             }
         }
-        let messageId = gameData ? gameData.messageId : null;
-        let threadId = gameData ? gameData.threadId : null;
+        let moderationMessageId = gameData ? gameData.moderationMessageId : null;
+        let publicMessageId = gameData ? gameData.publicMessageId : null;
+        let publicThreadId = gameData ? gameData.publicThreadId : null;
         const currentTime = Math.floor(Date.now() / 1000);
-        const newThreadId = getThreadId(gameInfo.playing);
 
-        if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside") || !newThreadId) {
-            if (messageId) {
-                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
-                const deleteResponse = await fetch(deleteUrl, { method: 'DELETE' });
-                if (deleteResponse.ok || deleteResponse.status === 404) {
-                    await redis.del(gameKey);
-                } else {
-                    console.error(`Error deleting Discord message ${messageId} during game update check. Status: ${deleteResponse.status}.`);
-                }
+        // --- Game Filtering ---
+        // If a game is unplayable, irrelevant, or has no valid thread, delete it everywhere and stop.
+        const newPublicThreadId = getThreadId(gameInfo.playing);
+        if (gameInfo.playing === 0 || gameInfo.description?.includes("envy") || gameInfo.description?.includes("require") || gameInfo.description?.includes("serverside") || !newPublicThreadId) {
+            if (publicMessageId && publicThreadId) {
+                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
+                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${publicMessageId} during filter cleanup:`, err));
             }
+            if (moderationMessageId) {
+                const deleteUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
+                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting moderation message ${moderationMessageId} during filter cleanup:`, err));
+            }
+            await redis.del(gameKey);
             return response.status(200).json({ success: true, action: 'skipped_or_deleted' });
         }
 
+        // --- State Determination ---
         const headers = { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT_AGENT_E };
         const isPublic = await redis.sismember(REDIS_KEYS.PUBLIC_GAMES_SET, universeId);
         const isModerationGame = gameInfo.playing > MODERATION_THRESHOLD;
+        const wasModerationGame = !!moderationMessageId;
 
+        // --- Moderation Logic ---
         if (isModerationGame) {
-            const isAlreadyModerated = await redis.sismember(REDIS_KEYS.MODERATED_GAMES_SET, universeId);
-            if (MODERATION_WEBHOOK_URL) {
-                const components = [{
-                    type: 1,
-                    components: [
-                        isPublic ? { type: 2, style: 4, label: 'Privatize', custom_id: `privatize_game_${universeId}` }
-                                 : { type: 2, style: 3, label: 'Approve', custom_id: `approve_game_${universeId}` }
-                    ]
-                }];
-                const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
-                
-                if (isAlreadyModerated && messageId) {
-                    const editUrl = `${MODERATION_WEBHOOK_URL}/messages/${messageId}`;
-                    await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(moderationPayload) });
-                } else {
-                    const createUrl = `${MODERATION_WEBHOOK_URL}?wait=true`;
-                    const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(moderationPayload) });
-                    if (createResponse.ok) {
-                        const responseData = await createResponse.json();
-                        messageId = responseData.id;
-                        await redis.sadd(REDIS_KEYS.MODERATED_GAMES_SET, universeId);
-                    }
+            const components = [{
+                type: 1,
+                components: [
+                    isPublic 
+                        ? { type: 2, style: 4, label: 'Privatize', custom_id: `privatize_game_${universeId}` }
+                        : { type: 2, style: 3, label: 'Approve', custom_id: `approve_game_${universeId}` }
+                ]
+            }];
+            const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
+
+            if (moderationMessageId) { // If it's already in moderation, just edit the message.
+                const editUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
+                await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(moderationPayload) });
+            } else { // If it just crossed the threshold, create a new moderation message.
+                const createUrl = `${MODERATION_WEBHOOK_URL}?wait=true`;
+                const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(moderationPayload) });
+                if (createResponse.ok) {
+                    const responseData = await createResponse.json();
+                    moderationMessageId = responseData.id;
                 }
             }
+            // If the game just became a moderation game, we must delete its old public message.
+            if (!wasModerationGame && publicMessageId && publicThreadId) {
+                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
+                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${publicMessageId} on transition to moderation:`, err));
+                publicMessageId = null;
+                publicThreadId = null;
+            }
+        } else if (wasModerationGame && !isModerationGame) {
+            // If the game drops below the player threshold, remove it from moderation.
+            const deleteUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
+            fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting moderation message ${moderationMessageId} on transition to public:`, err));
+            moderationMessageId = null;
         }
-        
+
+        // --- Public Logic ---
+        // A game is only public if it's NOT a moderation game OR it has been explicitly approved.
         if (!isModerationGame || isPublic) {
             const publicPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false);
-            if (messageId && threadId === newThreadId) {
-                const editUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
+            
+            // If the thread has changed, we must delete the old message and create a new one.
+            if (publicMessageId && publicThreadId !== newPublicThreadId) {
+                const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
+                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${publicMessageId} during thread change:`, err));
+                publicMessageId = null; 
+            }
+
+            if (publicMessageId) { // If thread is the same, just edit.
+                const editUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
                 const editResponse = await fetch(editUrl, { method: 'PATCH', headers, body: JSON.stringify(publicPayload) });
                 if (!editResponse.ok && editResponse.status === 404) {
-                    messageId = null;
+                    publicMessageId = null; // Message was deleted manually, so we'll recreate it.
                 }
-            } else {
-                if (messageId) {
-                    const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${messageId}?thread_id=${threadId}`;
-                    fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting Discord message ${messageId} during thread change:`, err));
-                }
-                messageId = null;
             }
             
-            if (!messageId) {
-                const createUrl = `${FORUM_WEBHOOK_URL}?wait=true&thread_id=${newThreadId}`;
+            if (!publicMessageId) { // If no message exists (or was just deleted), create one.
+                const createUrl = `${FORUM_WEBHOOK_URL}?wait=true&thread_id=${newPublicThreadId}`;
                 const createResponse = await fetch(createUrl, { method: 'POST', headers, body: JSON.stringify(publicPayload) });
-                if (!createResponse.ok) throw new Error(`Discord API Error on POST: ${createResponse.status}`);
-                const responseData = await createResponse.json();
-                messageId = responseData.id;
-                threadId = newThreadId;
+                if (createResponse.ok) {
+                    const responseData = await createResponse.json();
+                    publicMessageId = responseData.id;
+                    publicThreadId = newPublicThreadId;
+                } else {
+                    console.error(`Discord API Error on POST: ${createResponse.status}`);
+                }
             }
         }
 
+        // --- Database Update ---
         const newGameData = {
-            messageId: messageId,
-            threadId: threadId,
+            moderationMessageId,
+            publicMessageId,
+            publicThreadId,
             timestamp: currentTime,
             placeId: placeId,
             playerCount: gameInfo.playing,
