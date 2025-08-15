@@ -1,16 +1,16 @@
-name: Cleanup Stale Games
+name: Update IP Ranges
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 jobs:
-  trigger-cleanup:
+  trigger-ip-update:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Vercel Cleanup Endpoint
+      - name: Trigger Vercel IP Update Endpoint
         run: |
           curl --request GET \
-          --url 'https://envy-xi.vercel.app/api/run-cleanup' \
+          --url 'https://envy-xi.vercel.app/api/run-ip-update' \
           --header 'Authorization: Bearer ${{ secrets.CRON_SECRET }}'
