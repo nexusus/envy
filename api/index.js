@@ -164,7 +164,6 @@ module.exports = async (request, response) => {
                 ]
             }];
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
-            console.log("--- MODERATION PAYLOAD ---", JSON.stringify(moderationPayload, null, 2));
 
             if (moderationMessageId) { // If it's already in moderation, just edit the message.
                 const editUrl = `${MODERATION_WEBHOOK_URL}/messages/${moderationMessageId}`;
@@ -239,7 +238,7 @@ module.exports = async (request, response) => {
         pipeline.zadd(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, currentTime, gameKey);
         await pipeline.exec();
 
-        return response.status(200).json({ success: true, messageId: messageId });
+        return response.status(200).json({ success: true, publicMessageId, moderationMessageId });
 
     } catch (error) {
         console.error("Main Handler Error:", error);
