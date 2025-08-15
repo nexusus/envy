@@ -1,10 +1,10 @@
-const indexHandler = require('./index');
-const interactionsHandler = require('./interactions');
-const linkHandler = require('./link');
-const cleanupHandler = require('./run-cleanup');
-const ipUpdateHandler = require('./run-ip-update');
-const commandRegistrationHandler = require('./run-command-registration');
-const debugHandler = require('./debug');
+const indexHandler = require('./_handlers/index');
+const interactionsHandler = require('./_handlers/interactions');
+const linkHandler = require('./_handlers/link');
+const cleanupHandler = require('./_handlers/run-cleanup');
+const ipUpdateHandler = require('./_handlers/run-ip-update');
+const commandRegistrationHandler = require('./_handlers/run-command-registration');
+const debugHandler = require('./_handlers/debug');
 
 module.exports = async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host}`);

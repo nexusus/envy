@@ -1,4 +1,4 @@
-const { updateRobloxIps } = require('./lib/core-logic.js');
+const { updateRobloxIps } = require('../lib/core-logic.js');
 
 module.exports = async (request, response) => {
     if (request.headers['authorization'] !== `Bearer ${process.env.CRON_SECRET}`) {

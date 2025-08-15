@@ -1,5 +1,5 @@
-const { cleanupStaleGames, cleanupOrphanedMessages } = require('./lib/core-logic.js');
-const { CRON_SECRET } = require('./lib/config');
+const { cleanupStaleGames, cleanupOrphanedMessages } = require('../lib/core-logic.js');
+const { CRON_SECRET } = require('../lib/config.js');
 
 module.exports = async (request, response) => {
 
