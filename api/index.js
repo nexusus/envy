@@ -10,7 +10,8 @@ const {
     FORUM_WEBHOOK_URL,
     MODERATION_WEBHOOK_URL,
     MODERATION_CHANNEL_ID,
-    SECRET_HEADER_KEY
+    SECRET_HEADER_KEY,
+    DISCORD_CONSTANTS
 } = require('./lib/config');
 const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage } = require('./lib/discord-helpers');
 const { fetchGameInfo, isJobIdAuthentic } = require('./lib/roblox-service');
@@ -158,9 +159,9 @@ module.exports = async (request, response) => {
             const components = [{
                 type: 1,
                 components: [
-                    isPublic 
-                        ? { type: 2, style: 4, label: 'Privatize', custom_id: `privatize_game_${universeId}` }
-                        : { type: 2, style: 3, label: 'Approve', custom_id: `approve_game_${universeId}` }
+                    isPublic
+                        ? { type: 2, style: 4, label: 'Privatize', custom_id: `${DISCORD_CONSTANTS.PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
+                        : { type: 2, style: 3, label: 'Approve', custom_id: `${DISCORD_CONSTANTS.APPROVE_BUTTON_CUSTOM_ID}_${universeId}` }
                 ]
             }];
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
