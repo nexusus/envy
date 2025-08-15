@@ -13,7 +13,7 @@ const {
     SECRET_HEADER_KEY,
     DISCORD_CONSTANTS
 } = require('../lib/config');
-const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage } = require('../lib/discord-helpers');
+const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage, createOrEditMessage } = require('../lib/discord-helpers');
 const { fetchGameInfo, isJobIdAuthentic } = require('../lib/roblox-service');
 const { getThreadId, isIpInRanges } = require('../lib/utils');
 
@@ -129,6 +129,7 @@ module.exports = async (request, response) => {
         let moderationMessageId = gameData ? gameData.moderationMessageId : null;
         let publicMessageId = gameData ? gameData.publicMessageId : null;
         let publicThreadId = gameData ? gameData.publicThreadId : null;
+        let hasBeenModerated = gameData ? gameData.hasBeenModerated : false;
         const currentTime = Math.floor(Date.now() / 1000);
 
         // --- Game Filtering ---
@@ -149,35 +150,25 @@ module.exports = async (request, response) => {
         // --- State Determination ---
         const headers = { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT_AGENT_E };
         const isPublic = await redis.sismember(REDIS_KEYS.PUBLIC_GAMES_SET, universeId);
-        const isModerationGame = gameInfo.playing > MODERATION_THRESHOLD;
+        const isModerationGame = gameInfo.playing > MODERATION_THRESHOLD || hasBeenModerated;
         const wasModerationGame = !!moderationMessageId;
 
         // --- Moderation Logic ---
         if (isModerationGame) {
+            if (!hasBeenModerated) hasBeenModerated = true;
+
             const components = [{
                 type: 1,
                 components: [
                     isPublic
-                        ? { type: 2, style: 4, label: 'Privatize', custom_id: `${DISCORD_CONSTANTS.PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
+                        ? { type: 2, style: 2, label: 'Privatize', custom_id: `${DISCORD_CONSTANTS.PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
                         : { type: 2, style: 3, label: 'Approve', custom_id: `${DISCORD_CONSTANTS.APPROVE_BUTTON_CUSTOM_ID}_${universeId}` }
                 ]
             }];
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
+            const messageData = await createOrEditMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload);
+            if (messageData) moderationMessageId = messageData.id;
 
-            if (moderationMessageId) {
-                const editSuccessful = await editDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload);
-                if (!editSuccessful) {
-                    // If the edit fails (e.g., message was deleted), clear the ID to force recreation.
-                    moderationMessageId = null;
-                }
-            }
-            
-            if (!moderationMessageId) { // If no message exists or the edit failed, create a new one.
-                const responseData = await sendDiscordMessage(MODERATION_CHANNEL_ID, moderationPayload);
-                if (responseData) {
-                    moderationMessageId = responseData.id;
-                }
-            }
             // If the game just became a moderation game, we must delete its old public message.
             if (!wasModerationGame && publicMessageId && publicThreadId) {
                 const deleteUrl = `${FORUM_WEBHOOK_URL}/messages/${publicMessageId}?thread_id=${publicThreadId}`;
@@ -185,10 +176,6 @@ module.exports = async (request, response) => {
                 publicMessageId = null;
                 publicThreadId = null;
             }
-        } else if (wasModerationGame && !isModerationGame) {
-            // If the game drops below the player threshold, remove it from moderation.
-            await deleteDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId);
-            moderationMessageId = null;
         }
 
         // --- Public Logic ---
@@ -202,19 +189,10 @@ module.exports = async (request, response) => {
                 publicMessageId = null;
             }
 
-            if (publicMessageId) { // If thread is the same, just edit.
-                const editSuccessful = await editDiscordMessage(publicThreadId, publicMessageId, publicPayload);
-                if (!editSuccessful) {
-                    publicMessageId = null; // Message was deleted manually, so we'll recreate it.
-                }
-            }
-
-            if (!publicMessageId) { // If no message exists (or was just deleted), create one.
-                const responseData = await sendDiscordMessage(newPublicThreadId, publicPayload);
-                if (responseData) {
-                    publicMessageId = responseData.id;
-                    publicThreadId = newPublicThreadId;
-                }
+            const messageData = await createOrEditMessage(newPublicThreadId, publicMessageId, publicPayload);
+            if (messageData) {
+                publicMessageId = messageData.id;
+                publicThreadId = newPublicThreadId;
             }
         }
 
@@ -223,6 +201,7 @@ module.exports = async (request, response) => {
             moderationMessageId,
             publicMessageId,
             publicThreadId,
+            hasBeenModerated,
             timestamp: currentTime,
             placeId: placeId,
             playerCount: gameInfo.playing,

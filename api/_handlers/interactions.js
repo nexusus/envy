@@ -59,8 +59,8 @@ module.exports = async (request, response) => {
                             return;
                         }
 
-                        const gameKeys = await redis.zrevrange('games_by_timestamp', 0, 99);
-                        if (gameKeys.length === 0) {
+                        const gameCount = await redis.zcard('games_by_timestamp');
+                        if (gameCount === 0) {
                             await fetch(followUpUrl, {
                                 method: 'PATCH',
                                 headers: { 'Content-Type': 'application/json' },
@@ -69,23 +69,29 @@ module.exports = async (request, response) => {
                             return;
                         }
 
-                        const gameDataRaw = await redis.mget(...gameKeys);
+                        // Fetch all game keys and their scores (timestamps)
+                        const gameKeysWithScores = await redis.zrevrange('games_by_timestamp', 0, -1, 'WITHSCORES');
+                        const gameKeys = gameKeysWithScores.filter((_, i) => i % 2 === 0);
+
                         let totalPlayers = 0;
                         let highestPlayerCount = 0;
 
-                        gameDataRaw.forEach(raw => {
-                            if (raw) {
-                                try {
-                                    const data = JSON.parse(raw);
-                                    totalPlayers += data.playerCount || 0;
-                                    if (data.playerCount > highestPlayerCount) {
-                                        highestPlayerCount = data.playerCount;
+                        if (gameKeys.length > 0) {
+                            const gameDataRaw = await redis.mget(...gameKeys);
+                            gameDataRaw.forEach(raw => {
+                                if (raw) {
+                                    try {
+                                        const data = JSON.parse(raw);
+                                        totalPlayers += data.playerCount || 0;
+                                        if (data.playerCount > highestPlayerCount) {
+                                            highestPlayerCount = data.playerCount;
+                                        }
+                                    } catch (e) {
+                                        console.error("Failed to parse game data for stats:", raw);
                                     }
-                                } catch (e) {
-                                    console.error("Failed to parse game data for stats:", raw);
                                 }
-                            }
-                        });
+                            });
+                        }
 
                         await redis.set(cooldownKey, 'true', 'EX', COOLDOWN_SECONDS);
 
@@ -97,7 +103,7 @@ module.exports = async (request, response) => {
                                     title: "📊 Game Statistics",
                                     color: parseInt("0x8200c8", 16),
                                     fields: [
-                                        { name: "Total Games", value: `\`${gameKeys.length}\``, inline: true },
+                                        { name: "Total Games", value: `\`${gameCount}\``, inline: true },
                                         { name: "Total Players", value: `\`${totalPlayers.toLocaleString()}\``, inline: true },
                                         { name: "Highest Player Count", value: `\`${highestPlayerCount.toLocaleString()}\``, inline: true },
                                     ],
@@ -178,7 +184,7 @@ module.exports = async (request, response) => {
                         }
 
                         const newButton = isApproving
-                            ? { type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
+                            ? { type: 2, style: 2, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` }
                             : { type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}` };
 
                         await fetch(followUpUrl, {

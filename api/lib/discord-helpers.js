@@ -174,4 +174,15 @@ async function deleteDiscordMessage(channelId, messageId) {
     }
 }
 
-module.exports = { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage };
+async function createOrEditMessage(channelId, messageId, payload) {
+    if (messageId) {
+        const editedMessage = await editDiscordMessage(channelId, messageId, payload);
+        if (editedMessage) {
+            return editedMessage;
+        }
+        // If edit failed (e.g., message deleted), fall through to create a new one.
+    }
+    return await sendDiscordMessage(channelId, payload);
+}
+
+module.exports = { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage, createOrEditMessage };
