@@ -2,16 +2,8 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/link",
-      "destination": "/api/link"
-    },
-    {
-      "source": "/interactions",
-      "destination": "/api/interactions"
-    },
-    {
       "source": "/(.*)",
-      "destination": "/api/index"
+      "destination": "/api/main"
     }
   ]
 }
