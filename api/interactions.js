@@ -147,21 +147,26 @@ module.exports = async (request, response) => {
 
                 console.log(`Button clicked: customId=${customId}, universeId=${universeId}, isApproving=${isApproving}`);
 
+                // --- 1. Immediately defer the interaction to prevent "Interaction Failed" ---
+                response.status(200).json({
+                    type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
+                });
+
+
+                // --- 2. Perform the logic (Redis, etc.) ---
                 try {
                     if (isApproving) {
                         await redis.sadd('public_games', universeId);
                     } else {
                         await redis.srem('public_games', universeId);
-                        
-                        // When privatizing, we must immediately delete the public message.
+
                         const rawGameData = await redis.get(gameKey);
                         if (rawGameData) {
                             const gameData = JSON.parse(rawGameData);
                             if (gameData.publicMessageId && gameData.publicThreadId) {
                                 const deleteUrl = `${process.env.FORUM_WEBHOOK_URL}/messages/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
                                 fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${gameData.publicMessageId} on privatize:`, err));
-                                
-                                // Remove public data from Redis to prevent re-creation
+
                                 gameData.publicMessageId = null;
                                 gameData.publicThreadId = null;
                                 await redis.set(gameKey, JSON.stringify(gameData));
@@ -169,48 +174,36 @@ module.exports = async (request, response) => {
                         }
                     }
 
-                    // Check if the message was sent by the bot itself.
-                    // We can't edit messages sent by webhooks.
-                    const wasSentByBot = interaction.message.author.id === process.env.DISCORD_APP_ID;
-                    console.log(`Message author ID: ${interaction.message.author.id}, Bot ID: ${process.env.DISCORD_APP_ID}, wasSentByBot: ${wasSentByBot}`);
+                    // --- 3. Follow up with the actual message update ---
+                    const newButton = isApproving ?
+                        { type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` } :
+                        { type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}` };
 
-                    if (wasSentByBot) {
-                        // If the bot sent it, we can update the button directly.
-                        const newButton = isApproving ? {
-                            type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}`
-                        } : {
-                            type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}`
-                        };
-                        
-                        const updatedMessage = {
-                            ...interaction.message,
-                            components: [{ type: 1, components: [newButton] }],
-                        };
+                    // Construct a clean payload, avoiding spreading the entire interaction.message
+                    const updatedMessagePayload = {
+                        content: interaction.message.content,
+                        embeds: interaction.message.embeds,
+                        components: [{ type: 1, components: [newButton] }],
+                    };
 
-                        return response.status(200).json({
-                            type: InteractionResponseType.UPDATE_MESSAGE,
-                            data: updatedMessage,
-                        });
-                    } else {
-                        // If a webhook sent it, we can't edit it.
-                        // Instead, we send an ephemeral confirmation message.
-                        const actionText = isApproving ? 'approved' : 'privatized';
-                        return response.status(200).json({
-                            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                            data: {
-                                content: `The game has been successfully ${actionText}. (This old message can no longer be updated.)`,
-                                flags: InteractionResponseFlags.EPHEMERAL,
-                            },
-                        });
-                    }
+                    const webhookUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
+                    await fetch(webhookUrl, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updatedMessagePayload),
+                    });
+
                 } catch (error) {
                     console.error("Error handling button interaction:", error);
-                    return response.status(200).json({
-                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-                        data: {
+                    // If an error occurs, follow up with an ephemeral error message
+                    const errorWebhookUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
+                    await fetch(errorWebhookUrl, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
                             content: 'An error occurred while processing this action.',
                             flags: InteractionResponseFlags.EPHEMERAL,
-                        },
+                        }),
                     });
                 }
             }
