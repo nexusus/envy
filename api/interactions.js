@@ -141,69 +141,59 @@ module.exports = async (request, response) => {
                     });
                 }
 
+                console.log(`[LOG] MESSAGE_COMPONENT received: ${customId}`);
                 const universeId = customId.split('_')[2];
                 const isApproving = customId.startsWith(APPROVE_BUTTON_CUSTOM_ID);
                 const gameKey = `game:${universeId}`;
 
-                console.log(`Button clicked: customId=${customId}, universeId=${universeId}, isApproving=${isApproving}`);
-
-                // --- 1. Immediately defer the interaction to prevent "Interaction Failed" ---
-                response.status(200).json({
-                    type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
-                });
-
-
-                // --- 2. Perform the logic (Redis, etc.) ---
                 try {
+                    console.log(`[LOG] Processing action: isApproving=${isApproving}, universeId=${universeId}`);
                     if (isApproving) {
                         await redis.sadd('public_games', universeId);
+                        console.log(`[LOG] Added ${universeId} to public_games`);
                     } else {
                         await redis.srem('public_games', universeId);
-
+                        console.log(`[LOG] Removed ${universeId} from public_games`);
+                        
                         const rawGameData = await redis.get(gameKey);
                         if (rawGameData) {
                             const gameData = JSON.parse(rawGameData);
                             if (gameData.publicMessageId && gameData.publicThreadId) {
                                 const deleteUrl = `${process.env.FORUM_WEBHOOK_URL}/messages/${gameData.publicMessageId}?thread_id=${gameData.publicThreadId}`;
-                                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`Error deleting public message ${gameData.publicMessageId} on privatize:`, err));
-
+                                fetch(deleteUrl, { method: 'DELETE' }).catch(err => console.error(`[ERROR] Failed to delete public message ${gameData.publicMessageId}:`, err));
+                                
                                 gameData.publicMessageId = null;
                                 gameData.publicThreadId = null;
                                 await redis.set(gameKey, JSON.stringify(gameData));
+                                console.log(`[LOG] Cleared public message data for ${universeId}`);
                             }
                         }
                     }
 
-                    // --- 3. Follow up with the actual message update ---
-                    const newButton = isApproving ?
-                        { type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` } :
+                    const newButton = isApproving ? 
+                        { type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}` } : 
                         { type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}` };
 
-                    // Construct a clean payload, avoiding spreading the entire interaction.message
-                    const updatedMessagePayload = {
-                        content: interaction.message.content,
-                        embeds: interaction.message.embeds,
-                        components: [{ type: 1, components: [newButton] }],
-                    };
-
-                    const webhookUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
-                    await fetch(webhookUrl, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(updatedMessagePayload),
+                    // Respond directly with a clean payload
+                    console.log('[LOG] Sending UPDATE_MESSAGE response to Discord.');
+                    return response.status(200).json({
+                        type: InteractionResponseType.UPDATE_MESSAGE,
+                        data: {
+                            content: interaction.message.content,
+                            embeds: interaction.message.embeds,
+                            components: [{ type: 1, components: [newButton] }],
+                        },
                     });
 
                 } catch (error) {
-                    console.error("Error handling button interaction:", error);
-                    // If an error occurs, follow up with an ephemeral error message
-                    const errorWebhookUrl = `https://discord.com/api/v10/webhooks/${process.env.DISCORD_APP_ID}/${interaction.token}/messages/@original`;
-                    await fetch(errorWebhookUrl, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            content: 'An error occurred while processing this action.',
+                    console.error("[ERROR] Unhandled exception in button handler:", error);
+                    // Send a visible error message back to the user.
+                    return response.status(200).json({
+                        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                        data: {
+                            content: 'An unexpected error occurred while processing this action.',
                             flags: InteractionResponseFlags.EPHEMERAL,
-                        }),
+                        },
                     });
                 }
             }
