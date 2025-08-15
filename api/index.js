@@ -165,9 +165,15 @@ module.exports = async (request, response) => {
             }];
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
 
-            if (moderationMessageId) { // If it's already in moderation, just edit the message.
-                await editDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload);
-            } else { // If it just crossed the threshold, create a new moderation message.
+            if (moderationMessageId) {
+                const editSuccessful = await editDiscordMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload);
+                if (!editSuccessful) {
+                    // If the edit fails (e.g., message was deleted), clear the ID to force recreation.
+                    moderationMessageId = null;
+                }
+            }
+            
+            if (!moderationMessageId) { // If no message exists or the edit failed, create a new one.
                 const responseData = await sendDiscordMessage(MODERATION_CHANNEL_ID, moderationPayload);
                 if (responseData) {
                     moderationMessageId = responseData.id;

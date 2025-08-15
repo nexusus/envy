@@ -161,23 +161,39 @@ module.exports = async (request, response) => {
                         }
                     }
 
-                    // Update the button on the original message
-                    const newButton = isApproving ? {
-                        type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}`
-                    } : {
-                        type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}`
-                    };
-                    
-                    const updatedMessage = {
-                        ...interaction.message,
-                        components: [{ type: 1, components: [newButton] }],
-                    };
+                    // Check if the message was sent by the bot itself.
+                    // We can't edit messages sent by webhooks.
+                    const wasSentByBot = interaction.message.author.id === process.env.DISCORD_APP_ID;
 
-                    return response.status(200).json({
-                        type: InteractionResponseType.UPDATE_MESSAGE,
-                        data: updatedMessage,
-                    });
+                    if (wasSentByBot) {
+                        // If the bot sent it, we can update the button directly.
+                        const newButton = isApproving ? {
+                            type: 2, style: 4, label: 'Privatize', custom_id: `${PRIVATIZE_BUTTON_CUSTOM_ID}_${universeId}`
+                        } : {
+                            type: 2, style: 3, label: 'Approve', custom_id: `${APPROVE_BUTTON_CUSTOM_ID}_${universeId}`
+                        };
+                        
+                        const updatedMessage = {
+                            ...interaction.message,
+                            components: [{ type: 1, components: [newButton] }],
+                        };
 
+                        return response.status(200).json({
+                            type: InteractionResponseType.UPDATE_MESSAGE,
+                            data: updatedMessage,
+                        });
+                    } else {
+                        // If a webhook sent it, we can't edit it.
+                        // Instead, we send an ephemeral confirmation message.
+                        const actionText = isApproving ? 'approved' : 'privatized';
+                        return response.status(200).json({
+                            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+                            data: {
+                                content: `The game has been successfully ${actionText}. (This old message can no longer be updated.)`,
+                                flags: InteractionResponseFlags.EPHEMERAL,
+                            },
+                        });
+                    }
                 } catch (error) {
                     console.error("Error handling button interaction:", error);
                     return response.status(200).json({
