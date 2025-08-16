@@ -7,7 +7,7 @@ async function getWhitelistRank(robloxUsername) {
     const { data, error } = await supabase
         .from('whitelists')
         .select('rank')
-        .eq('roblox_username', robloxUsername)
+        .cs('roblox_username', [robloxUsername])
         .single();
 
     if (error) {
