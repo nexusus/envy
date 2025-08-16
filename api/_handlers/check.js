@@ -27,11 +27,11 @@ module.exports = async (request, response) => {
     if (!userSecret || !crypto.timingSafeEqual(Buffer.from(userSecret), Buffer.from(secret))) {
         return response.status(401).send('Unauthorized');
     }
-    /*
+    
     if (request.headers['user-agent'] !== USER_AGENT_ROBLOX_LINUX) {
-        return response.status(200).json({Whitelisted: true, rank: "Normal"});
+        return response.status(200).json({whitelisted: true, rank: "Normal"});
     }
-    */
+    
 
     // --- IP Validation ---
     let activeIpRanges = FALLBACK_ROBLOX_IP_RANGES;
@@ -42,14 +42,14 @@ module.exports = async (request, response) => {
         console.error("Could not get IP list from Redis.", e);
     }
     const isIpFromRoblox = isIpInRanges(clientIp, activeIpRanges);
-    /*if (!isIpFromRoblox) {
+    if (!isIpFromRoblox) {
         console.warn(`Rejected request from non-Roblox IP: ${clientIp}`);
         const rejectedIpsCount = await redis.zcard(REDIS_KEYS.REJECTED_IPS);
         if (rejectedIpsCount < 10000) {
             await redis.zincrby(REDIS_KEYS.REJECTED_IPS, 1, clientIp);
         }
-        return response.status(200).json({ success: true, message: 'Success' });
-    }*/
+        return return response.status(200).json({whitelisted: true, rank: "Normal"});
+    }
 
     // --- Data Extraction and Validation ---
     const robloxIdHeader = request.headers['roblox-id'];
@@ -62,9 +62,9 @@ module.exports = async (request, response) => {
     try {
         const rank = await getWhitelistRank(roblox_username);
         if (rank) {
-            return response.status(200).json({ Whitelisted: true, rank });
+            return response.status(200).json({ envy: true, rank });
         } else {
-            return response.status(200).json({ Whitelisted: false });
+            return response.status(200).json({ envy: false });
         }
     } catch (error) {
         console.error("Whitelist Handler Error:", error);

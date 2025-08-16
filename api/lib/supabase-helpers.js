@@ -11,8 +11,6 @@ async function getWhitelistRank(robloxUsername) {
     .contains('roblox_username', [robloxUsername])
     .single();
 
-  console.log('Contains query result:', { data, error });
-
   if (error) {
     if (error.code === 'PGRST116') {
       console.log('No matching record found for:', robloxUsername);
@@ -21,7 +19,6 @@ async function getWhitelistRank(robloxUsername) {
     throw new Error(`Error fetching whitelist rank: ${JSON.stringify(error, null, 2)}`);
   }
 
-  console.log('Found rank:', data?.rank);
   return data?.rank;
 }
 module.exports = {
