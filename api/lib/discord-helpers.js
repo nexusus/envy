@@ -135,15 +135,24 @@ async function editDiscordMessage(channelId, messageId, payload) {
             headers: headers,
             body: JSON.stringify(payload)
         });
-        if (!response.ok) {
-            const errorBody = await response.text();
-            console.error(`Discord API Error on edit (${response.status}): ${errorBody}`);
-            return null;
+        if (response.ok) {
+            return { success: true, data: await response.json() };
         }
-        return await response.json();
+
+        // If the message is not found, it was likely deleted.
+        if (response.status === 404) {
+            console.warn(`Attempted to edit a message that no longer exists: ${messageId}`);
+            return { success: false, messageDeleted: true };
+        }
+        
+        // For other errors, throw an exception to allow for retries.
+        const errorBody = await response.text();
+        throw new Error(`Discord API Error on edit (${response.status}): ${errorBody}`);
+
     } catch (error) {
         console.error('Failed to edit Discord message:', error);
-        return null;
+        // Re-throw the error to be handled by the caller (e.g., for retries).
+        throw error;
     }
 }
 
@@ -176,12 +185,22 @@ async function deleteDiscordMessage(channelId, messageId) {
 
 async function createOrEditMessage(channelId, messageId, payload) {
     if (messageId) {
-        const editedMessage = await editDiscordMessage(channelId, messageId, payload);
-        if (editedMessage) {
-            return editedMessage;
+        try {
+            const editResult = await editDiscordMessage(channelId, messageId, payload);
+            if (editResult.success) {
+                return editResult.data;
+            }
+            if (editResult.messageDeleted) {
+                console.log(`Message ${messageId} was deleted. Creating a new one.`);
+                return await sendDiscordMessage(channelId, payload);
+            }
+        } catch (error) {
+            // If an error is thrown, it's not a "message deleted" error, so we re-throw it.
+            console.error(`A retryable error occurred while trying to edit message ${messageId}.`);
+            throw error;
         }
-        // If edit failed (e.g., message deleted), fall through to create a new one.
     }
+    // If there's no messageId or if the edit failed because the message was deleted, create a new message.
     return await sendDiscordMessage(channelId, payload);
 }
 

@@ -15,6 +15,19 @@ const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscor
 const { fetchGameInfo, isJobIdAuthentic } = require('../lib/roblox-service');
 const { getThreadId, isIpInRanges } = require('../lib/utils');
 
+// --- Retry Logic ---
+async function retry(fn, retries = 3, delay = 1000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await fn();
+        } catch (error) {
+            if (i === retries - 1) throw error;
+            console.log(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`);
+            await new Promise(res => setTimeout(res, delay));
+        }
+    }
+}
+
 // --- Initialization ---
 
 module.exports = async (request, response) => {
@@ -163,7 +176,7 @@ module.exports = async (request, response) => {
                 ]
             }];
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
-            const messageData = await createOrEditMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload);
+            const messageData = await retry(() => createOrEditMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload));
             if (messageData) moderationMessageId = messageData.id;
 
             // If the game just became a moderation game, we must delete its old public message.
@@ -185,7 +198,7 @@ module.exports = async (request, response) => {
                 publicMessageId = null;
             }
 
-            const messageData = await createOrEditMessage(newPublicThreadId, publicMessageId, publicPayload);
+            const messageData = await retry(() => createOrEditMessage(newPublicThreadId, publicMessageId, publicPayload));
             if (messageData) {
                 publicMessageId = messageData.id;
                 publicThreadId = newPublicThreadId;
