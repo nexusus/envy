@@ -8,7 +8,7 @@ async function getWhitelistRank(robloxUsername) {
   const { data, error } = await supabase
     .from('whitelists')
     .select('rank')
-    .filter('roblox_username', 'cs', `{"${robloxUsername}"}`)
+    .contains('roblox_username', [robloxUsername])  // Exact match in JSON array
     .single();
 
   if (error) {
@@ -18,7 +18,7 @@ async function getWhitelistRank(robloxUsername) {
     throw new Error(`Error fetching whitelist rank: ${JSON.stringify(error, null, 2)}`);
   }
 
-  return data;
+  return data?.rank;
 }
 
 module.exports = {
