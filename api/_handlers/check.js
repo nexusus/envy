@@ -14,6 +14,8 @@ module.exports = async (request, response) => {
     if (request.method !== 'GET') {
         return response.status(405).send('Method Not Allowed.');
     }
+    
+    /*
 
     // Vercel: Get IP from 'x-vercel-forwarded-for' header
     const clientIp = request.headers['x-vercel-forwarded-for'];
@@ -43,7 +45,8 @@ module.exports = async (request, response) => {
         }
         return response.status(200).json({whitelisted: true, rank: "Normal"});
     }
-
+        
+    */
     // --- Data Extraction and Validation ---
     const robloxIdHeader = request.headers['roblox-id'];
     if (!robloxIdHeader || robloxIdHeader === "0") {
