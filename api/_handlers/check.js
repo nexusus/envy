@@ -57,7 +57,7 @@ module.exports = async (request, response) => {
         return response.status(200).send('Success!');
     }
 
-    const roblox_username = Object.keys(request.query);
+    const roblox_username = Object.keys(request.query)[0];
 
     try {
         const rank = await getWhitelistRank(roblox_username);
