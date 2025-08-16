@@ -4,15 +4,6 @@ const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./config');
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function getWhitelistRank(robloxUsername) {
-  console.log('Searching for username (case-sensitive):', robloxUsername);
-  
-  // First, let's try to get all records to see what we're working with
-  const { data: allData, error: allError } = await supabase
-    .from('whitelists')
-    .select('rank, roblox_username');
-    
-  console.log('All whitelist data:', allData);
-  
   // Now try the contains query
   const { data, error } = await supabase
     .from('whitelists')
