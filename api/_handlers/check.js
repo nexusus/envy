@@ -27,10 +27,12 @@ module.exports = async (request, response) => {
     if (!userSecret || !crypto.timingSafeEqual(Buffer.from(userSecret), Buffer.from(secret))) {
         return response.status(401).send('Unauthorized');
     }
+    /*
     if (request.headers['user-agent'] !== USER_AGENT_ROBLOX_LINUX) {
         return response.status(200).json({Whitelisted: true, rank: "Normal"});
     }
-
+    */
+   
     // --- IP Validation ---
     let activeIpRanges = FALLBACK_ROBLOX_IP_RANGES;
     try {
