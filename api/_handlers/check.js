@@ -4,7 +4,6 @@ const {
     FALLBACK_ROBLOX_IP_RANGES,
     USER_AGENT_ROBLOX_LINUX,
     REDIS_KEYS,
-    SECRET_HEADER_KEY
 } = require('../lib/config');
 const { isIpInRanges } = require('../lib/utils');
 const { getWhitelistRank } = require('../lib/supabase-helpers');
@@ -14,8 +13,6 @@ module.exports = async (request, response) => {
     if (request.method !== 'GET') {
         return response.status(405).send('Method Not Allowed.');
     }
-    
-    /*
 
     // Vercel: Get IP from 'x-vercel-forwarded-for' header
     const clientIp = request.headers['x-vercel-forwarded-for'];
@@ -46,7 +43,7 @@ module.exports = async (request, response) => {
         return response.status(200).json({whitelisted: true, rank: "Normal"});
     }
         
-    */
+    
     // --- Data Extraction and Validation ---
     const robloxIdHeader = request.headers['roblox-id'];
     if (!robloxIdHeader || robloxIdHeader === "0") {
