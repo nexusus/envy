@@ -57,11 +57,7 @@ module.exports = async (request, response) => {
         return response.status(200).send('Success!');
     }
 
-    const { username: roblox_username } = request.query;
-
-    if (!roblox_username) {
-      return response.status(400).send('Username query parameter is required');
-    }
+    const roblox_username = Object.keys(request.query);
 
     try {
         const rank = await getWhitelistRank(roblox_username);

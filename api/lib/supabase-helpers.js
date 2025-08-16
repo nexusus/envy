@@ -4,11 +4,16 @@ const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./config');
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function getWhitelistRank(robloxUsername) {
-  const { data, error } = await supabase.rpc('get_user_by_roblox_username', {
-    p_roblox_username: robloxUsername,
-  }).single();
+  const { data, error } = await supabase
+    .from('whitelists')
+    .select('rank')
+    .contains('roblox_username', [robloxUsername])
+    .single();
 
   if (error) {
+    if (error.code === 'PGRST116') {
+      return null;
+    }
     throw new Error(`Error fetching whitelist rank: ${JSON.stringify(error, null, 2)}`);
   }
 
