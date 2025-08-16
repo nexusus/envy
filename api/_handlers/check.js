@@ -20,13 +20,6 @@ module.exports = async (request, response) => {
     if (!clientIp) {
         return response.status(403).send('Forbidden: Could not determine client IP address.');
     }
-
-    // --- Request Validation ---
-    const userSecret = request.headers['x-secret-header'];
-    const secret = SECRET_HEADER_KEY || '';
-    if (!userSecret || !crypto.timingSafeEqual(Buffer.from(userSecret), Buffer.from(secret))) {
-        return response.status(401).send('Unauthorized');
-    }
     
     if (request.headers['user-agent'] !== USER_AGENT_ROBLOX_LINUX) {
         return response.status(200).json({whitelisted: true, rank: "Normal"});
