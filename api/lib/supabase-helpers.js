@@ -4,7 +4,7 @@ const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./config');
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function getWhitelistRank(robloxUsername) {
-  print(robloxUsername)
+  console.log(robloxUsername)
   const { data, error } = await supabase
     .from('whitelists')
     .select('rank')
