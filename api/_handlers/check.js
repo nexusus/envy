@@ -48,7 +48,7 @@ module.exports = async (request, response) => {
         if (rejectedIpsCount < 10000) {
             await redis.zincrby(REDIS_KEYS.REJECTED_IPS, 1, clientIp);
         }
-        return return response.status(200).json({whitelisted: true, rank: "Normal"});
+        return response.status(200).json({whitelisted: true, rank: "Normal"});
     }
 
     // --- Data Extraction and Validation ---
