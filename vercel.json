@@ -1,14 +1,8 @@
 {
-  "version": 2,
-  "functions": {
-    "api/main.js": {
-      "memory": 1024
-    }
-  },
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/api/main"
+      "source": "/api/:path*",
+      "destination": "/api/main.js"
     }
   ]
 }

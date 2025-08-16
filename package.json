@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "dependencies": {
     "@discordjs/rest": "^2.2.0",
+    "@supabase/supabase-js": "^2.55.0",
     "@upstash/redis": "^1.28.0",
     "discord-api-types": "^0.37.73",
     "discord-interactions": "^3.4.0",
     "ioredis": "^5.4.1",
-    "ip-address": "^9.0.5",
-    "ip": "^2.0.1"
+    "ip": "^2.0.1",
+    "ip-address": "^9.0.5"
   }
 }

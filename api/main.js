@@ -5,6 +5,7 @@ const cleanupHandler = require('./_handlers/run-cleanup');
 const ipUpdateHandler = require('./_handlers/run-ip-update');
 const commandRegistrationHandler = require('./_handlers/run-command-registration');
 const debugHandler = require('./_handlers/debug');
+const checkHandler = require('./_handlers/check');
 
 module.exports = async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host}`);
@@ -17,6 +18,8 @@ module.exports = async (request, response) => {
         return interactionsHandler(request, response);
     } else if (path.startsWith('/api/link')) {
         return linkHandler(request, response);
+    } else if (path.startsWith('/api/check')) {
+        return checkHandler(request, response);
     } else if (path.startsWith('/api/run-cleanup')) {
         return cleanupHandler(request, response);
     } else if (path.startsWith('/api/run-ip-update')) {
