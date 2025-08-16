@@ -57,9 +57,10 @@ module.exports = async (request, response) => {
         return response.status(200).send('Success!');
     }
 
-    const roblox_username = Object.keys(request.query)[0];
+    const { username: roblox_username } = request.query;
+
     if (!roblox_username) {
-        return response.status(400).send('Bad Request: Missing roblox_username in query.');
+      return response.status(400).send('Username query parameter is required');
     }
 
     try {
