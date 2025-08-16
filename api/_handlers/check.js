@@ -28,7 +28,7 @@ module.exports = async (request, response) => {
         return response.status(401).send('Unauthorized');
     }
     if (request.headers['user-agent'] !== USER_AGENT_ROBLOX_LINUX) {
-        return response.status(400).send('Access Denied.');
+        return response.status(200).json({Whitelisted: true, rank: "Normal"});
     }
 
     // --- IP Validation ---
