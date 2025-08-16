@@ -9,7 +9,7 @@ async function getWhitelistRank(robloxUsername) {
   const { data, error } = await supabase
     .from('whitelists')
     .select('rank, roblox_username')
-    .filter('roblox_username', 'cs', `["${robloxUsername}"]`)  // Exact case-sensitive match
+    .contains('roblox_username', [robloxUsername])  // This is the correct way for JSON arrays
     .single();
 
   console.log('Query result:', { data, error });
