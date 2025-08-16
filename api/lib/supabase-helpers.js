@@ -4,18 +4,15 @@ const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./config');
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function getWhitelistRank(robloxUsername) {
-    const { data, error } = await supabase
-        .from('whitelists')
-        .select('rank')
-        .ov('roblox_username', [robloxUsername])
-        .single();
+  const { data, error } = await supabase.rpc('get_user_by_roblox_username', {
+    p_roblox_username: robloxUsername,
+  }).single();
 
-    if (error) {
-        console.error('Error fetching whitelist rank:', error);
-        return null;
-    }
+  if (error) {
+    throw new Error(`Error fetching whitelist rank: ${JSON.stringify(error, null, 2)}`);
+  }
 
-    return data ? data.rank : null;
+  return data;
 }
 
 module.exports = {
