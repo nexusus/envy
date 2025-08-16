@@ -32,7 +32,7 @@ module.exports = async (request, response) => {
         return response.status(200).json({Whitelisted: true, rank: "Normal"});
     }
     */
-   
+
     // --- IP Validation ---
     let activeIpRanges = FALLBACK_ROBLOX_IP_RANGES;
     try {
@@ -42,14 +42,14 @@ module.exports = async (request, response) => {
         console.error("Could not get IP list from Redis.", e);
     }
     const isIpFromRoblox = isIpInRanges(clientIp, activeIpRanges);
-    if (!isIpFromRoblox) {
+    /*if (!isIpFromRoblox) {
         console.warn(`Rejected request from non-Roblox IP: ${clientIp}`);
         const rejectedIpsCount = await redis.zcard(REDIS_KEYS.REJECTED_IPS);
         if (rejectedIpsCount < 10000) {
             await redis.zincrby(REDIS_KEYS.REJECTED_IPS, 1, clientIp);
         }
         return response.status(200).json({ success: true, message: 'Success' });
-    }
+    }*/
 
     // --- Data Extraction and Validation ---
     const robloxIdHeader = request.headers['roblox-id'];
