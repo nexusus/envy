@@ -202,33 +202,29 @@ module.exports = async (request, response) => {
             const publicGamesSet = await redis.smembers(REDIS_KEYS.PUBLIC_GAMES_SET);
             const allGameKeys = await redis.zrevrange(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, 0, -1);
             
-            const publicGameKeys = allGameKeys.filter(key => {
-                const universeId = key.split(':')[1];
-                return publicGamesSet.includes(universeId);
-            });
+            const publicGameKeys = allGameKeys.filter(key => publicGamesSet.includes(key.split(':')[1]));
 
             let totalPlayers = 0;
             let highestPlayerCount = 0;
-            const gameCount = publicGameKeys.length > 0 ? await redis.scard(REDIS_KEYS.PUBLIC_GAMES_SET) : (isPublic ? 1 : 0);
+            let gameCount = 0;
 
             if (publicGameKeys.length > 0) {
                 const gameDataRaw = await redis.mget(...publicGameKeys);
-                gameDataRaw.forEach(raw => {
-                    if (raw) {
-                        try {
-                            const data = JSON.parse(raw);
-                            totalPlayers += data.playerCount || 0;
-                            if (data.playerCount > highestPlayerCount) {
-                                highestPlayerCount = data.playerCount;
-                            }
-                        } catch (e) {
-                            console.error("Failed to parse game data for stats:", raw);
+                const validGames = gameDataRaw.filter(Boolean);
+                gameCount = validGames.length;
+
+                validGames.forEach(raw => {
+                    try {
+                        const data = JSON.parse(raw);
+                        const playerCount = data.playerCount || 0;
+                        totalPlayers += playerCount;
+                        if (playerCount > highestPlayerCount) {
+                            highestPlayerCount = playerCount;
                         }
+                    } catch (e) {
+                        console.error("Failed to parse game data for stats:", raw);
                     }
                 });
-            } else if (isPublic) {
-                totalPlayers = gameInfo.playing;
-                highestPlayerCount = gameInfo.playing;
             }
 
             const statsEmbed = {
