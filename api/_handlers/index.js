@@ -277,6 +277,7 @@ module.exports = async (request, response) => {
             hasBeenModerated,
             timestamp: currentTime,
             placeId: placeId,
+            universeId: universeId,
             playerCount: gameInfo.playing,
             gameName: gameInfo.name
         };
