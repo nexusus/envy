@@ -9,9 +9,12 @@ const {
     REDIS_KEYS,
     MODERATION_CHANNEL_ID,
     SECRET_HEADER_KEY,
-    DISCORD_CONSTANTS
+    DISCORD_CONSTANTS,
+    PREVIEW_GUILD_ID,
+    PREVIEW_CHANNEL_ID,
+    PLAYER_COUNT_THRESHOLD
 } = require('../lib/config');
-const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage, createOrEditMessage } = require('../lib/discord-helpers');
+const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage, createOrEditMessage, getGuildIcon, createPreviewEmbed } = require('../lib/discord-helpers');
 const { fetchGameInfo, isJobIdAuthentic } = require('../lib/roblox-service');
 const { getThreadId, isIpInRanges } = require('../lib/utils');
 
@@ -140,6 +143,7 @@ module.exports = async (request, response) => {
         let moderationMessageId = gameData ? gameData.moderationMessageId : null;
         let publicMessageId = gameData ? gameData.publicMessageId : null;
         let publicThreadId = gameData ? gameData.publicThreadId : null;
+        let previewMessageId = gameData ? gameData.previewMessageId : null;
         let hasBeenModerated = gameData ? gameData.hasBeenModerated : false;
         const currentTime = Math.floor(Date.now() / 1000);
 
@@ -205,11 +209,67 @@ module.exports = async (request, response) => {
             }
         }
 
+        // --- Live Statistics and Preview Logic ---
+        const gameCount = await redis.zcard(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET);
+        let totalPlayers = 0;
+        let highestPlayerCount = 0;
+
+        if (gameCount > 0) {
+            const gameKeys = await redis.zrevrange(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, 0, -1);
+            const gameDataRaw = await redis.mget(...gameKeys);
+            gameDataRaw.forEach(raw => {
+                if (raw) {
+                    try {
+                        const data = JSON.parse(raw);
+                        totalPlayers += data.playerCount || 0;
+                        if (data.playerCount > highestPlayerCount) {
+                            highestPlayerCount = data.playerCount;
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse game data for stats:", raw);
+                    }
+                }
+            });
+        }
+
+        const statsEmbed = {
+            embeds: [{
+                title: "📊 Game Statistics",
+                color: parseInt("0x8200c8", 16),
+                fields: [
+                    { name: "Total Games", value: `\`${gameCount}\``, inline: true },
+                    { name: "Total Players", value: `\`${totalPlayers.toLocaleString()}\``, inline: true },
+                    { name: "Highest Player Count", value: `\`${highestPlayerCount.toLocaleString()}\``, inline: true },
+                ],
+                footer: { text: "Envy Serverside" },
+                timestamp: new Date().toISOString(),
+            }],
+        };
+
+        let liveStatsMessageId = await redis.get(REDIS_KEYS.LIVE_STATS_MESSAGE_ID);
+        const statsMessageData = await createOrEditMessage(PREVIEW_CHANNEL_ID, liveStatsMessageId, statsEmbed);
+        if (statsMessageData) {
+            await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_ID, statsMessageData.id);
+        }
+
+        if (gameInfo.playing > PLAYER_COUNT_THRESHOLD) {
+            const guildIconUrl = await getGuildIcon(PREVIEW_GUILD_ID);
+            const previewPayload = createPreviewEmbed(gameInfo, guildIconUrl);
+            const previewMessageData = await createOrEditMessage(PREVIEW_CHANNEL_ID, previewMessageId, previewPayload);
+            if (previewMessageData) {
+                previewMessageId = previewMessageData.id;
+            }
+        } else if (previewMessageId) {
+            await deleteDiscordMessage(PREVIEW_CHANNEL_ID, previewMessageId);
+            previewMessageId = null;
+        }
+
         // --- Database Update ---
         const newGameData = {
             moderationMessageId,
             publicMessageId,
             publicThreadId,
+            previewMessageId,
             hasBeenModerated,
             timestamp: currentTime,
             placeId: placeId,

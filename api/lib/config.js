@@ -10,7 +10,9 @@ const REQUIRED_ENV_VARS = [
     'DISCORD_PUBLIC_KEY',
     'DISCORD_APP_ID',
     'DISCORD_BOT_TOKEN',
-    'MODERATION_CHANNEL_ID'
+    'MODERATION_CHANNEL_ID',
+    'PREVIEW_GUILD_ID',
+    'PREVIEW_CHANNEL_ID'
 ];
 
 for (const envVar of REQUIRED_ENV_VARS) {
@@ -26,6 +28,7 @@ const FALLBACK_ROBLOX_IP_RANGES = ('128.116.0.0/16').split(',');
 const AUTH_CACHE_EXPIRATION_SECONDS = 300;
 const MODERATION_THRESHOLD = 99;
 const COOLDOWN_SECONDS = 30;
+const PLAYER_COUNT_THRESHOLD = parseInt(process.env.PLAYER_COUNT_THRESHOLD, 10) || 13;
 
 // --- API Endpoints ---
 const ROBLOX_API_ENDPOINT = 'https://apis.roblox.com';
@@ -64,6 +67,8 @@ const DISCORD_CONSTANTS = {
 
 // --- Channel IDs ---
 const MODERATION_CHANNEL_ID = process.env.MODERATION_CHANNEL_ID;
+const PREVIEW_GUILD_ID = process.env.PREVIEW_GUILD_ID;
+const PREVIEW_CHANNEL_ID = process.env.PREVIEW_CHANNEL_ID;
 
 // --- Thread IDs ---
 const THREAD_IDS = {
@@ -96,6 +101,9 @@ module.exports = {
     REDIS_KEYS,
     DISCORD_CONSTANTS,
     MODERATION_CHANNEL_ID,
+    PREVIEW_GUILD_ID,
+    PREVIEW_CHANNEL_ID,
+    PLAYER_COUNT_THRESHOLD,
     THREAD_IDS,
     SECRET_HEADER_KEY,
     CRON_SECRET,

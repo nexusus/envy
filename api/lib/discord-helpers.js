@@ -204,4 +204,48 @@ async function createOrEditMessage(channelId, messageId, payload) {
     return await sendDiscordMessage(channelId, payload);
 }
 
-module.exports = { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage, createOrEditMessage };
+async function getGuildIcon(guildId) {
+    const url = `https://discord.com/api/v10/guilds/${guildId}`;
+    const headers = {
+        'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        'User-Agent': 'Envy-Bot (https://github.com/nexus-devs/envy, 1.0.0)'
+    };
+
+    try {
+        const response = await fetch(url, { headers });
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error(`Discord API Error fetching guild info (${response.status}): ${errorBody}`);
+            return null;
+        }
+        const guild = await response.json();
+        return guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : null;
+    } catch (error) {
+        console.error('Failed to fetch guild icon:', error);
+        return null;
+    }
+}
+
+function createPreviewEmbed(gameInfo, guildIconUrl) {
+    return {
+        username: "Envy Live Preview",
+        avatar_url: "https://i.ibb.co/TMQbDpH8/image.png",
+        embeds: [{
+            color: parseInt("0x8200c8", 16),
+            thumbnail: { url: guildIconUrl },
+            fields: [
+                { name: "Players", value: `\`${gameInfo.playing}\``, inline: true },
+                { name: "Visits", value: `\`${formatNumber(gameInfo.visits)}\``, inline: true },
+                { name: "Favorites", value: `\`${formatNumber(gameInfo.favoritedCount)}\``, inline: true },
+                { name: "Genre", value: `\`${gameInfo.genre}\``, inline: true },
+            ],
+            footer: {
+                icon_url: "https://i.ibb.co/TMQbDpH8/image.png",
+                text: "Envy Serverside"
+            },
+            timestamp: new Date().toISOString()
+        }]
+    };
+}
+
+module.exports = { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscordMessage, createOrEditMessage, getGuildIcon, createPreviewEmbed };

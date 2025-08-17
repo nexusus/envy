@@ -3,7 +3,8 @@ const {
     REDIS_KEYS,
     BGPVIEW_URL,
     AWS_IP_RANGES_URL,
-    MODERATION_CHANNEL_ID
+    MODERATION_CHANNEL_ID,
+    PREVIEW_CHANNEL_ID
 } = require('./config');
 const { deleteDiscordMessage } = require('./discord-helpers');
 
@@ -112,6 +113,15 @@ async function cleanupStaleGames() {
                     if (!wasDeleted) {
                         allMessagesDeleted = false;
                         console.error(`Failed to delete stale moderation message ${data.moderationMessageId}.`);
+                    }
+                }
+
+                // Attempt to delete the preview message if it exists
+                if (data.previewMessageId) {
+                    const wasDeleted = await deleteDiscordMessage(PREVIEW_CHANNEL_ID, data.previewMessageId);
+                    if (!wasDeleted) {
+                        allMessagesDeleted = false;
+                        console.error(`Failed to delete stale preview message ${data.previewMessageId}.`);
                     }
                 }
 

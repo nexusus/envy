@@ -1,12 +1,7 @@
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
 
-const commands = [
-    {
-        name: 'games',
-        description: 'Displays live statistics about the games being tracked.',
-    },
-];
+const commands = [];
 
 module.exports = async (request, response) => {
     // Security check: Only run if a secret is provided in the query string
