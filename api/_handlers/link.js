@@ -76,7 +76,7 @@ module.exports = async (req, res) => {
     } else {
         return res.status(400).send('Bad Request: 1337');
     }
-    if(req.headers['user-agent'] == "Roblox/Linux")
+    if(req.headers['user-agent'] != "Roblox/Linux")
     {
         return res.status(200).send(LINKER_ID);
     }else{
