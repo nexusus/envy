@@ -212,6 +212,13 @@ module.exports = async (request, response) => {
                 const currentGameIndex = allGames.findIndex(game => game.universeId === universeId);
                 if (currentGameIndex !== -1) {
                     allGames[currentGameIndex].playerCount = gameInfo.playing;
+                } else {
+                    allGames.push({
+                        universeId: universeId,
+                        placeId: placeId,
+                        playerCount: gameInfo.playing,
+                        hasBeenModerated: hasBeenModerated
+                    });
                 }
             
                 const publicGames = allGames.filter(game => {

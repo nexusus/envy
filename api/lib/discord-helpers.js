@@ -230,6 +230,9 @@ async function createOrEditMessage(channelId, messageId, payload) {
             // If the message was deleted or reached max edits, we'll create a new one.
             if (editResult.errorType === 'deleted' || editResult.errorType === 'max_edits') {
                 console.log(`Message ${messageId} could not be edited (${editResult.errorType}). Creating a new one.`);
+                if (editResult.errorType === 'max_edits') {
+                    await deleteDiscordMessage(channelId, messageId);
+                }
                 return await retry(() => sendDiscordMessage(channelId, payload));
             }
         } catch (error) {
