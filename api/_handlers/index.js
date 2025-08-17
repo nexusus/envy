@@ -209,8 +209,7 @@ module.exports = async (request, response) => {
 
             let totalPlayers = 0;
             let highestPlayerCount = 0;
-            let gameCount = 0;
-            let isCurrentGameInSet = false;
+            const gameCount = publicGameKeys.length > 0 ? await redis.scard(REDIS_KEYS.PUBLIC_GAMES_SET) : (isPublic ? 1 : 0);
 
             if (publicGameKeys.length > 0) {
                 const gameDataRaw = await redis.mget(...publicGameKeys);
@@ -218,29 +217,18 @@ module.exports = async (request, response) => {
                     if (raw) {
                         try {
                             const data = JSON.parse(raw);
-                            if (data.playerCount > 0) {
-                                totalPlayers += data.playerCount;
-                                gameCount++;
-                                if (data.playerCount > highestPlayerCount) {
-                                    highestPlayerCount = data.playerCount;
-                                }
-                            }
-                            if (data.placeId === placeId) {
-                                isCurrentGameInSet = true;
+                            totalPlayers += data.playerCount || 0;
+                            if (data.playerCount > highestPlayerCount) {
+                                highestPlayerCount = data.playerCount;
                             }
                         } catch (e) {
                             console.error("Failed to parse game data for stats:", raw);
                         }
                     }
                 });
-            }
-
-            if (isPublic && !isCurrentGameInSet) {
-                gameCount++;
-                totalPlayers += gameInfo.playing;
-                if (gameInfo.playing > highestPlayerCount) {
-                    highestPlayerCount = gameInfo.playing;
-                }
+            } else if (isPublic) {
+                totalPlayers = gameInfo.playing;
+                highestPlayerCount = gameInfo.playing;
             }
 
             const statsEmbed = {
