@@ -211,7 +211,7 @@ module.exports = async (request, response) => {
                 const allGames = gameDataRaw.map(raw => raw ? JSON.parse(raw) : null).filter(Boolean);
             
                 const publicGames = allGames.filter(game => {
-                    const universeId = game.placeId ? game.placeId.toString() : '';
+                    const universeId = game.universeId ? game.universeId.toString() : (game.placeId ? game.placeId.toString() : '');
                     return (game.playerCount <= MODERATION_THRESHOLD && !game.hasBeenModerated) || publicGamesSet.includes(universeId);
                 });
             
