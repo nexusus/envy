@@ -202,34 +202,28 @@ module.exports = async (request, response) => {
             const publicGamesSet = await redis.smembers(REDIS_KEYS.PUBLIC_GAMES_SET);
             const allGameKeys = await redis.zrevrange(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, 0, -1);
             
-            const publicGameKeys = allGameKeys.filter(key => publicGamesSet.includes(key.split(':')[1]));
-            const gameCount = publicGameKeys.length;
-
             let totalPlayers = 0;
             let highestPlayerCount = 0;
-
-            if (gameCount > 0) {
-                const otherPublicGameKeys = publicGameKeys.filter(key => key !== gameKey);
-                totalPlayers = gameInfo.playing; 
-                highestPlayerCount = gameInfo.playing;
-
-                if (otherPublicGameKeys.length > 0) {
-                    const gameDataRaw = await redis.mget(...otherPublicGameKeys);
-                    gameDataRaw.forEach(raw => {
-                        if (raw) {
-                            try {
-                                const data = JSON.parse(raw);
-                                const playerCount = data.playerCount || 0;
-                                totalPlayers += playerCount;
-                                if (playerCount > highestPlayerCount) {
-                                    highestPlayerCount = playerCount;
-                                }
-                            } catch (e) {
-                                console.error("Failed to parse game data for stats:", raw);
-                            }
-                        }
-                    });
-                }
+            let gameCount = 0;
+            
+            if (allGameKeys.length > 0) {
+                const gameDataRaw = await redis.mget(...allGameKeys);
+                const allGames = gameDataRaw.map(raw => raw ? JSON.parse(raw) : null).filter(Boolean);
+            
+                const publicGames = allGames.filter(game => {
+                    const universeId = game.placeId ? game.placeId.toString() : '';
+                    return (game.playerCount <= MODERATION_THRESHOLD && !game.hasBeenModerated) || publicGamesSet.includes(universeId);
+                });
+            
+                gameCount = publicGames.length;
+            
+                publicGames.forEach(game => {
+                    const playerCount = game.playerCount || 0;
+                    totalPlayers += playerCount;
+                    if (playerCount > highestPlayerCount) {
+                        highestPlayerCount = playerCount;
+                    }
+                });
             }
 
             const statsEmbed = {
