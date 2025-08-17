@@ -203,28 +203,33 @@ module.exports = async (request, response) => {
             const allGameKeys = await redis.zrevrange(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, 0, -1);
             
             const publicGameKeys = allGameKeys.filter(key => publicGamesSet.includes(key.split(':')[1]));
+            const gameCount = publicGameKeys.length;
 
             let totalPlayers = 0;
             let highestPlayerCount = 0;
-            let gameCount = 0;
 
-            if (publicGameKeys.length > 0) {
-                const gameDataRaw = await redis.mget(...publicGameKeys);
-                const validGames = gameDataRaw.filter(Boolean);
-                gameCount = validGames.length;
+            if (gameCount > 0) {
+                const otherPublicGameKeys = publicGameKeys.filter(key => key !== gameKey);
+                totalPlayers = gameInfo.playing; 
+                highestPlayerCount = gameInfo.playing;
 
-                validGames.forEach(raw => {
-                    try {
-                        const data = JSON.parse(raw);
-                        const playerCount = data.playerCount || 0;
-                        totalPlayers += playerCount;
-                        if (playerCount > highestPlayerCount) {
-                            highestPlayerCount = playerCount;
+                if (otherPublicGameKeys.length > 0) {
+                    const gameDataRaw = await redis.mget(...otherPublicGameKeys);
+                    gameDataRaw.forEach(raw => {
+                        if (raw) {
+                            try {
+                                const data = JSON.parse(raw);
+                                const playerCount = data.playerCount || 0;
+                                totalPlayers += playerCount;
+                                if (playerCount > highestPlayerCount) {
+                                    highestPlayerCount = playerCount;
+                                }
+                            } catch (e) {
+                                console.error("Failed to parse game data for stats:", raw);
+                            }
                         }
-                    } catch (e) {
-                        console.error("Failed to parse game data for stats:", raw);
-                    }
-                });
+                    });
+                }
             }
 
             const statsEmbed = {
