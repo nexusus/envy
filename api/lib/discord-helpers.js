@@ -222,22 +222,23 @@ async function deleteDiscordMessage(channelId, messageId) {
 async function createOrEditMessage(channelId, messageId, payload) {
     if (messageId) {
         try {
-            const editResult = await editDiscordMessage(channelId, messageId, payload);
+            // The editDiscordMessage function is now wrapped with retry logic.
+            const editResult = await retry(() => editDiscordMessage(channelId, messageId, payload));
             if (editResult.success) {
                 return editResult.data;
             }
+            // If the message was deleted or reached max edits, we'll create a new one.
             if (editResult.errorType === 'deleted' || editResult.errorType === 'max_edits') {
-                console.log(`Message ${messageId} could not be edited (${editResult.errorType}). Deleting and creating a new one.`);
-                await retry(() => deleteDiscordMessage(channelId, messageId));
+                console.log(`Message ${messageId} could not be edited (${editResult.errorType}). Creating a new one.`);
                 return await retry(() => sendDiscordMessage(channelId, payload));
             }
         } catch (error) {
-            // If an error is thrown, it's a retryable one, so we re-throw it.
-            console.error(`A retryable error occurred while trying to edit message ${messageId}.`);
+            // A retryable error that has already been retried should be logged.
+            console.error(`A final retryable error occurred while trying to edit message ${messageId}.`);
             throw error;
         }
     }
-    // If there's no messageId or if the edit failed permanently, create a new message.
+    // If there's no messageId, create a new message with retry logic.
     return await retry(() => sendDiscordMessage(channelId, payload));
 }
 
