@@ -18,32 +18,6 @@ const { createDiscordEmbed, sendDiscordMessage, editDiscordMessage, deleteDiscor
 const { fetchGameInfo, isJobIdAuthentic } = require('../lib/roblox-service');
 const { getThreadId, isIpInRanges } = require('../lib/utils');
 
-// --- Retry Logic ---
-async function retry(fn, retries = 3, defaultDelay = 1000) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            return await fn();
-        } catch (error) {
-            if (i === retries - 1) throw error;
-
-            let delay = defaultDelay;
-            if (error.message.includes("Discord API Error on edit (429)")) {
-                try {
-                    const rateLimitInfo = JSON.parse(error.message.split('): ')[1]);
-                    delay = Math.ceil(rateLimitInfo.retry_after * 1000) + 50; // Add a 50ms buffer
-                    console.log(`Discord rate limit hit. Retrying in ${delay}ms...`);
-                } catch (e) {
-                    console.log(`Could not parse rate limit info. Using default delay. Error: ${e.message}`);
-                }
-            } else {
-                console.log(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`);
-            }
-            
-            await new Promise(res => setTimeout(res, delay));
-        }
-    }
-}
-
 // --- Initialization ---
 
 module.exports = async (request, response) => {
@@ -144,7 +118,7 @@ module.exports = async (request, response) => {
         }
 
         const gameKey = `${REDIS_KEYS.GAME_PREFIX}${universeId}`;
-        const rawGameData = await retry(() => redis.get(gameKey));
+        const rawGameData = await redis.get(gameKey);
         let gameData = null;
         if (rawGameData) {
             try {
@@ -193,7 +167,7 @@ module.exports = async (request, response) => {
                 ]
             }];
             const moderationPayload = createDiscordEmbed(gameInfo, placeId, thumbnail, jobId, false, components);
-            const messageData = await retry(() => createOrEditMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload));
+            const messageData = await createOrEditMessage(MODERATION_CHANNEL_ID, moderationMessageId, moderationPayload);
             if (messageData) moderationMessageId = messageData.id;
 
             // If the game just became a moderation game, we must delete its old public message.
@@ -215,7 +189,7 @@ module.exports = async (request, response) => {
                 publicMessageId = null;
             }
 
-            const messageData = await retry(() => createOrEditMessage(newPublicThreadId, publicMessageId, publicPayload));
+            const messageData = await createOrEditMessage(newPublicThreadId, publicMessageId, publicPayload);
             if (messageData) {
                 publicMessageId = messageData.id;
                 publicThreadId = newPublicThreadId;

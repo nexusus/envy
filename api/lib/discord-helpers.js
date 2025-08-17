@@ -1,5 +1,31 @@
 const { MAX_DESCRIPTION_LENGTH } = require('./config');
 
+// --- Retry Logic ---
+async function retry(fn, retries = 3, defaultDelay = 1000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await fn();
+        } catch (error) {
+            if (i === retries - 1) throw error;
+
+            let delay = defaultDelay;
+            if (error.message.includes("Discord API Error on edit (429)")) {
+                try {
+                    const rateLimitInfo = JSON.parse(error.message.split('): ')[1]);
+                    delay = Math.ceil(rateLimitInfo.retry_after * 1000) + 50; // Add a 50ms buffer
+                    console.log(`Discord rate limit hit. Retrying in ${delay}ms...`);
+                } catch (e) {
+                    console.log(`Could not parse rate limit info. Using default delay. Error: ${e.message}`);
+                }
+            } else {
+                console.log(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`);
+            }
+            
+            await new Promise(res => setTimeout(res, delay));
+        }
+    }
+}
+
 function formatNumber(n) {
     n = parseInt(n);
     if (isNaN(n)) return "Unknown";
@@ -202,8 +228,8 @@ async function createOrEditMessage(channelId, messageId, payload) {
             }
             if (editResult.errorType === 'deleted' || editResult.errorType === 'max_edits') {
                 console.log(`Message ${messageId} could not be edited (${editResult.errorType}). Deleting and creating a new one.`);
-                await deleteDiscordMessage(channelId, messageId);
-                return await sendDiscordMessage(channelId, payload);
+                await retry(() => deleteDiscordMessage(channelId, messageId));
+                return await retry(() => sendDiscordMessage(channelId, payload));
             }
         } catch (error) {
             // If an error is thrown, it's a retryable one, so we re-throw it.
@@ -212,7 +238,7 @@ async function createOrEditMessage(channelId, messageId, payload) {
         }
     }
     // If there's no messageId or if the edit failed permanently, create a new message.
-    return await sendDiscordMessage(channelId, payload);
+    return await retry(() => sendDiscordMessage(channelId, payload));
 }
 
 async function getGuildIcon(guildId) {
