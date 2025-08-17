@@ -57,7 +57,9 @@ const REDIS_KEYS = {
     MODERATED_GAMES_SET: 'moderated_games',
     GAMES_BY_TIMESTAMP_ZSET: 'games_by_timestamp',
     LIVE_STATS_MESSAGE_ID: 'live_stats_message_id',
-    LIVE_STATS_MESSAGE_CONTENT: 'live_stats_message_content'
+    LIVE_STATS_MESSAGE_CONTENT: 'live_stats_message_content',
+    LIVE_STATS_LAST_UPDATE: 'live_stats_last_update',
+    LOCK_STATS_UPDATE: 'lock:stats_update'
 };
 
 // --- Discord ---

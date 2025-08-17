@@ -197,60 +197,79 @@ module.exports = async (request, response) => {
         }
 
         // --- Live Statistics and Preview Logic ---
-        const publicGamesSet = await redis.smembers(REDIS_KEYS.PUBLIC_GAMES_SET);
-        const allGameKeys = await redis.zrevrange(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, 0, -1);
-        
-        const publicGameKeys = allGameKeys.filter(key => {
-            const universeId = key.split(':')[1];
-            return publicGamesSet.includes(universeId);
-        });
-
-        let totalPlayers = 0;
-        let highestPlayerCount = 0;
-        let gameCount = 0;
-
-        if (publicGameKeys.length > 0) {
-            const gameDataRaw = await redis.mget(...publicGameKeys);
-            gameDataRaw.forEach(raw => {
-                if (raw) {
-                    try {
-                        const data = JSON.parse(raw);
-                        if (data.playerCount > 0) {
-                            totalPlayers += data.playerCount;
-                            gameCount++;
-                            if (data.playerCount > highestPlayerCount) {
-                                highestPlayerCount = data.playerCount;
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Failed to parse game data for stats:", raw);
-                    }
-                }
+        const statsUpdateLock = await redis.set(REDIS_KEYS.LOCK_STATS_UPDATE, 'locked', 'EX', 10, 'NX');
+        if (statsUpdateLock) {
+            const publicGamesSet = await redis.smembers(REDIS_KEYS.PUBLIC_GAMES_SET);
+            const allGameKeys = await redis.zrevrange(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, 0, -1);
+            
+            const publicGameKeys = allGameKeys.filter(key => {
+                const universeId = key.split(':')[1];
+                return publicGamesSet.includes(universeId);
             });
-        }
 
-        const statsEmbed = {
-            embeds: [{
-                title: "📊 Game Statistics",
-                color: parseInt("0x8200c8", 16),
-                fields: [
-                    { name: "Total Games", value: `\`${gameCount}\``, inline: true },
-                    { name: "Total Players", value: `\`${totalPlayers.toLocaleString()}\``, inline: true },
-                    { name: "Highest Player Count", value: `\`${highestPlayerCount.toLocaleString()}\``, inline: true },
-                ],
-                footer: { text: "Envy Serverside" }
-            }],
-        };
+            let totalPlayers = 0;
+            let highestPlayerCount = 0;
+            let gameCount = 0;
+            let isCurrentGameInSet = false;
 
-        const messageContent = JSON.stringify(statsEmbed.embeds);
-        const lastMessageContent = await redis.get(REDIS_KEYS.LIVE_STATS_MESSAGE_CONTENT);
+            if (publicGameKeys.length > 0) {
+                const gameDataRaw = await redis.mget(...publicGameKeys);
+                gameDataRaw.forEach(raw => {
+                    if (raw) {
+                        try {
+                            const data = JSON.parse(raw);
+                            if (data.playerCount > 0) {
+                                totalPlayers += data.playerCount;
+                                gameCount++;
+                                if (data.playerCount > highestPlayerCount) {
+                                    highestPlayerCount = data.playerCount;
+                                }
+                            }
+                            if (data.placeId === placeId) {
+                                isCurrentGameInSet = true;
+                            }
+                        } catch (e) {
+                            console.error("Failed to parse game data for stats:", raw);
+                        }
+                    }
+                });
+            }
 
-        if (messageContent !== lastMessageContent) {
-            let liveStatsMessageId = await redis.get(REDIS_KEYS.LIVE_STATS_MESSAGE_ID);
-            const statsMessageData = await createOrEditMessage(PREVIEW_CHANNEL_ID, liveStatsMessageId, statsEmbed);
-            if (statsMessageData) {
-                await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_ID, statsMessageData.id);
-                await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_CONTENT, messageContent);
+            if (isPublic && !isCurrentGameInSet) {
+                gameCount++;
+                totalPlayers += gameInfo.playing;
+                if (gameInfo.playing > highestPlayerCount) {
+                    highestPlayerCount = gameInfo.playing;
+                }
+            }
+
+            const statsEmbed = {
+                embeds: [{
+                    title: "📊 Game Statistics",
+                    color: parseInt("0x8200c8", 16),
+                    fields: [
+                        { name: "Total Games", value: `\`${gameCount}\``, inline: true },
+                        { name: "Total Players", value: `\`${totalPlayers.toLocaleString()}\``, inline: true },
+                        { name: "Highest Player Count", value: `\`${highestPlayerCount.toLocaleString()}\``, inline: true },
+                    ],
+                    footer: { text: "Envy Serverside" },
+                    timestamp: new Date().toISOString()
+                }],
+            };
+
+            const messageContent = JSON.stringify(statsEmbed.embeds[0].fields);
+            const lastMessageContent = await redis.get(REDIS_KEYS.LIVE_STATS_MESSAGE_CONTENT);
+            const lastUpdateTime = await redis.get(REDIS_KEYS.LIVE_STATS_LAST_UPDATE);
+            const timeSinceLastUpdate = currentTime - (lastUpdateTime || 0);
+
+            if (messageContent !== lastMessageContent || timeSinceLastUpdate > 60) {
+                let liveStatsMessageId = await redis.get(REDIS_KEYS.LIVE_STATS_MESSAGE_ID);
+                const statsMessageData = await createOrEditMessage(PREVIEW_CHANNEL_ID, liveStatsMessageId, statsEmbed);
+                if (statsMessageData) {
+                    await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_ID, statsMessageData.id);
+                    await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_CONTENT, messageContent);
+                    await redis.set(REDIS_KEYS.LIVE_STATS_LAST_UPDATE, currentTime);
+                }
             }
         }
 
