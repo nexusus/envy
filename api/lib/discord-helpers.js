@@ -142,11 +142,21 @@ async function editDiscordMessage(channelId, messageId, payload) {
         // If the message is not found, it was likely deleted.
         if (response.status === 404) {
             console.warn(`Attempted to edit a message that no longer exists: ${messageId}`);
-            return { success: false, messageDeleted: true };
+            return { success: false, errorType: 'deleted' };
+        }
+
+        const errorBody = await response.text();
+        try {
+            const errorJson = JSON.parse(errorBody);
+            if (errorJson.code === 30046) { // Max edits reached
+                console.warn(`Max edits reached for message ${messageId}.`);
+                return { success: false, errorType: 'max_edits' };
+            }
+        } catch (e) {
+            // Not a JSON error, fall through to generic error
         }
         
         // For other errors, throw an exception to allow for retries.
-        const errorBody = await response.text();
         throw new Error(`Discord API Error on edit (${response.status}): ${errorBody}`);
 
     } catch (error) {
@@ -190,17 +200,18 @@ async function createOrEditMessage(channelId, messageId, payload) {
             if (editResult.success) {
                 return editResult.data;
             }
-            if (editResult.messageDeleted) {
-                console.log(`Message ${messageId} was deleted. Creating a new one.`);
+            if (editResult.errorType === 'deleted' || editResult.errorType === 'max_edits') {
+                console.log(`Message ${messageId} could not be edited (${editResult.errorType}). Deleting and creating a new one.`);
+                await deleteDiscordMessage(channelId, messageId);
                 return await sendDiscordMessage(channelId, payload);
             }
         } catch (error) {
-            // If an error is thrown, it's not a "message deleted" error, so we re-throw it.
+            // If an error is thrown, it's a retryable one, so we re-throw it.
             console.error(`A retryable error occurred while trying to edit message ${messageId}.`);
             throw error;
         }
     }
-    // If there's no messageId or if the edit failed because the message was deleted, create a new message.
+    // If there's no messageId or if the edit failed permanently, create a new message.
     return await sendDiscordMessage(channelId, payload);
 }
 
