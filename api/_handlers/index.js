@@ -235,15 +235,20 @@ module.exports = async (request, response) => {
                     { name: "Total Players", value: `\`${totalPlayers.toLocaleString()}\``, inline: true },
                     { name: "Highest Player Count", value: `\`${highestPlayerCount.toLocaleString()}\``, inline: true },
                 ],
-                footer: { text: "Envy Serverside" },
-                timestamp: new Date().toISOString(),
+                footer: { text: "Envy Serverside" }
             }],
         };
 
-        let liveStatsMessageId = await redis.get(REDIS_KEYS.LIVE_STATS_MESSAGE_ID);
-        const statsMessageData = await createOrEditMessage(PREVIEW_CHANNEL_ID, liveStatsMessageId, statsEmbed);
-        if (statsMessageData) {
-            await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_ID, statsMessageData.id);
+        const messageContent = JSON.stringify(statsEmbed.embeds);
+        const lastMessageContent = await redis.get(REDIS_KEYS.LIVE_STATS_MESSAGE_CONTENT);
+
+        if (messageContent !== lastMessageContent) {
+            let liveStatsMessageId = await redis.get(REDIS_KEYS.LIVE_STATS_MESSAGE_ID);
+            const statsMessageData = await createOrEditMessage(PREVIEW_CHANNEL_ID, liveStatsMessageId, statsEmbed);
+            if (statsMessageData) {
+                await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_ID, statsMessageData.id);
+                await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_CONTENT, messageContent);
+            }
         }
 
         if (gameInfo.playing > PLAYER_COUNT_THRESHOLD && (!isModerationGame || isPublic)) {

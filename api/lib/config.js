@@ -55,7 +55,9 @@ const REDIS_KEYS = {
     REJECTED_IPS: 'rejected_ips',
     PUBLIC_GAMES_SET: 'public_games',
     MODERATED_GAMES_SET: 'moderated_games',
-    GAMES_BY_TIMESTAMP_ZSET: 'games_by_timestamp'
+    GAMES_BY_TIMESTAMP_ZSET: 'games_by_timestamp',
+    LIVE_STATS_MESSAGE_ID: 'live_stats_message_id',
+    LIVE_STATS_MESSAGE_CONTENT: 'live_stats_message_content'
 };
 
 // --- Discord ---
