@@ -209,10 +209,14 @@ module.exports = async (request, response) => {
             if (allGameKeys.length > 0) {
                 const gameDataRaw = await redis.mget(...allGameKeys);
                 const allGames = gameDataRaw.map(raw => raw ? JSON.parse(raw) : null).filter(Boolean);
+                const currentGameIndex = allGames.findIndex(game => game.universeId === universeId);
+                if (currentGameIndex !== -1) {
+                    allGames[currentGameIndex].playerCount = gameInfo.playing;
+                }
             
                 const publicGames = allGames.filter(game => {
-                    const universeId = game.universeId ? game.universeId.toString() : (game.placeId ? game.placeId.toString() : '');
-                    return (game.playerCount <= MODERATION_THRESHOLD && !game.hasBeenModerated) || publicGamesSet.includes(universeId);
+                    const gameUniverseId = game.universeId ? game.universeId.toString() : (game.placeId ? game.placeId.toString() : '');
+                    return (game.playerCount <= MODERATION_THRESHOLD && !game.hasBeenModerated) || publicGamesSet.includes(gameUniverseId);
                 });
             
                 gameCount = publicGames.length;
