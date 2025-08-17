@@ -185,8 +185,11 @@ async function cleanupOrphanedMessages() {
             const messages = await response.json();
             
             for (const message of messages) {
+                // Use the edited timestamp if it exists, otherwise fall back to the original timestamp.
+                const relevantTimestamp = message.edited_timestamp || message.timestamp;
+
                 // Check if the message is from our bot and is older than the stale threshold.
-                if (message.author.bot && new Date(message.timestamp).getTime() < staleTimestamp) {
+                if (message.author.bot && new Date(relevantTimestamp).getTime() < staleTimestamp) {
                     console.log(`Found orphaned/stale message ${message.id} in thread ${threadId}. Deleting...`);
                     const wasDeleted = await deleteDiscordMessage(threadId, message.id);
                     if (wasDeleted) {
