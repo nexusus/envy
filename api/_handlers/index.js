@@ -19,13 +19,26 @@ const { fetchGameInfo, isJobIdAuthentic } = require('../lib/roblox-service');
 const { getThreadId, isIpInRanges } = require('../lib/utils');
 
 // --- Retry Logic ---
-async function retry(fn, retries = 3, delay = 1000) {
+async function retry(fn, retries = 3, defaultDelay = 1000) {
     for (let i = 0; i < retries; i++) {
         try {
             return await fn();
         } catch (error) {
             if (i === retries - 1) throw error;
-            console.log(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`);
+
+            let delay = defaultDelay;
+            if (error.message.includes("Discord API Error on edit (429)")) {
+                try {
+                    const rateLimitInfo = JSON.parse(error.message.split('): ')[1]);
+                    delay = Math.ceil(rateLimitInfo.retry_after * 1000) + 50; // Add a 50ms buffer
+                    console.log(`Discord rate limit hit. Retrying in ${delay}ms...`);
+                } catch (e) {
+                    console.log(`Could not parse rate limit info. Using default delay. Error: ${e.message}`);
+                }
+            } else {
+                console.log(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`);
+            }
+            
             await new Promise(res => setTimeout(res, delay));
         }
     }
@@ -131,7 +144,7 @@ module.exports = async (request, response) => {
         }
 
         const gameKey = `${REDIS_KEYS.GAME_PREFIX}${universeId}`;
-        const rawGameData = await redis.get(gameKey);
+        const rawGameData = await retry(() => redis.get(gameKey));
         let gameData = null;
         if (rawGameData) {
             try {
@@ -210,13 +223,19 @@ module.exports = async (request, response) => {
         }
 
         // --- Live Statistics and Preview Logic ---
-        const gameCount = await redis.zcard(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET);
+        const publicGamesSet = await redis.smembers(REDIS_KEYS.PUBLIC_GAMES_SET);
+        const allGameKeys = await redis.zrevrange(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, 0, -1);
+        
+        const publicGameKeys = allGameKeys.filter(key => {
+            const universeId = key.split(':')[1];
+            return publicGamesSet.includes(universeId);
+        });
+
         let totalPlayers = 0;
         let highestPlayerCount = 0;
 
-        if (gameCount > 0) {
-            const gameKeys = await redis.zrevrange(REDIS_KEYS.GAMES_BY_TIMESTAMP_ZSET, 0, -1);
-            const gameDataRaw = await redis.mget(...gameKeys);
+        if (publicGameKeys.length > 0) {
+            const gameDataRaw = await redis.mget(...publicGameKeys);
             gameDataRaw.forEach(raw => {
                 if (raw) {
                     try {
@@ -231,6 +250,7 @@ module.exports = async (request, response) => {
                 }
             });
         }
+        const gameCount = publicGameKeys.length;
 
         const statsEmbed = {
             embeds: [{
@@ -252,7 +272,7 @@ module.exports = async (request, response) => {
             await redis.set(REDIS_KEYS.LIVE_STATS_MESSAGE_ID, statsMessageData.id);
         }
 
-        if (gameInfo.playing > PLAYER_COUNT_THRESHOLD) {
+        if (gameInfo.playing > PLAYER_COUNT_THRESHOLD && (!isModerationGame || isPublic)) {
             const guildIconUrl = await getGuildIcon(PREVIEW_GUILD_ID);
             const previewPayload = createPreviewEmbed(gameInfo, guildIconUrl);
             const previewMessageData = await createOrEditMessage(PREVIEW_CHANNEL_ID, previewMessageId, previewPayload);

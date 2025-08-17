@@ -1,7 +1,7 @@
 const { verifyKey, InteractionType, InteractionResponseType, InteractionResponseFlags } = require('discord-interactions');
 const { redis } = require('../lib/redis');
 const { deleteDiscordMessage } = require('../lib/discord-helpers');
-const { DISCORD_CONSTANTS, COOLDOWN_SECONDS } = require('../lib/config');
+const { DISCORD_CONSTANTS, COOLDOWN_SECONDS, PREVIEW_CHANNEL_ID } = require('../lib/config');
 const { GAMES_COMMAND_NAME, APPROVE_BUTTON_CUSTOM_ID, PRIVATIZE_BUTTON_CUSTOM_ID } = DISCORD_CONSTANTS;
 
 // --- Initialization ---
@@ -90,9 +90,13 @@ module.exports = async (request, response) => {
 
                                     gameData.publicMessageId = null;
                                     gameData.publicThreadId = null;
-                                    await redis.set(gameKey, JSON.stringify(gameData));
-                                    console.log(`[LOG] Cleared public message data for ${universeId}`);
                                 }
+                                if (gameData.previewMessageId) {
+                                    await deleteDiscordMessage(PREVIEW_CHANNEL_ID, gameData.previewMessageId);
+                                    gameData.previewMessageId = null;
+                                }
+                                await redis.set(gameKey, JSON.stringify(gameData));
+                                console.log(`[LOG] Cleared public message data for ${universeId}`);
                             }
                         }
 
