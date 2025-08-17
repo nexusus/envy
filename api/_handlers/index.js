@@ -207,6 +207,7 @@ module.exports = async (request, response) => {
 
         let totalPlayers = 0;
         let highestPlayerCount = 0;
+        let gameCount = 0;
 
         if (publicGameKeys.length > 0) {
             const gameDataRaw = await redis.mget(...publicGameKeys);
@@ -214,9 +215,12 @@ module.exports = async (request, response) => {
                 if (raw) {
                     try {
                         const data = JSON.parse(raw);
-                        totalPlayers += data.playerCount || 0;
-                        if (data.playerCount > highestPlayerCount) {
-                            highestPlayerCount = data.playerCount;
+                        if (data.playerCount > 0) {
+                            totalPlayers += data.playerCount;
+                            gameCount++;
+                            if (data.playerCount > highestPlayerCount) {
+                                highestPlayerCount = data.playerCount;
+                            }
                         }
                     } catch (e) {
                         console.error("Failed to parse game data for stats:", raw);
@@ -224,7 +228,6 @@ module.exports = async (request, response) => {
                 }
             });
         }
-        const gameCount = publicGameKeys.length;
 
         const statsEmbed = {
             embeds: [{

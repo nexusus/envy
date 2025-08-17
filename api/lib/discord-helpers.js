@@ -114,7 +114,8 @@ function createDiscordEmbed(gameInfo, placeId, thumbnail, JobId, isNonHttp = fal
             footer: {
                 icon_url: "https://i.ibb.co/TMQbDpH8/image.png",
                 text: "Envy Serverside"
-            }
+            },
+            timestamp: new Date().toISOString()
         }],
         components
     };
