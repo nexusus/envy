@@ -56,9 +56,8 @@ module.exports = async (req, res) => {
     if (username == 'N/A' || scriptPls == 'N/A' || jobId == 'N/A') {
         return res.status(400).send('This is not fair, is it?');
     }
-    const gameName = fetchGameInfo(placeId)
-        .then(gameInfo => gameInfo.gameInfo.name)
-        .catch(() => 'Unknown Game');
+    const gameData = await fetchGameInfo(placeId, redis);
+    const gameName = gameData && gameData.gameInfo ? gameData.gameInfo.name : 'Unknown Game';
     
     const embed = {
         
