@@ -6,6 +6,7 @@ const ipUpdateHandler = require('./_handlers/run-ip-update');
 const commandRegistrationHandler = require('./_handlers/run-command-registration');
 const debugHandler = require('./_handlers/debug');
 const checkHandler = require('./_handlers/check');
+const scriptHandler = require('./_handlers/script');
 
 module.exports = async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host}`);
@@ -28,6 +29,8 @@ module.exports = async (request, response) => {
         return commandRegistrationHandler(request, response);
     } else if (path.startsWith('/api/debug')) {
         return debugHandler(request, response);
+    } else if (path.startsWith('/api/script')) {
+        return scriptHandler(request, response);
     } else {
         // Fallback to the index handler for any other requests.
         return indexHandler(request, response);
