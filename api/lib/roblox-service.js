@@ -5,7 +5,8 @@ const {
     GAMEJOIN_API_ENDPOINT,
     USER_AGENT_AGENT_E,
     USER_AGENT_ROBLOX_WININET,
-    REDIS_KEYS
+    REDIS_KEYS,
+    USER_AGENT_ROBLOX_LINUX
 } = require('./config');
 
 async function fetchGameInfo(placeId, redis) {
@@ -14,7 +15,7 @@ async function fetchGameInfo(placeId, redis) {
         let universeId = await redis.get(universeIdCacheKey);
         if (!universeId) {
             const universeResponse = await fetch(`${ROBLOX_API_ENDPOINT}/universes/v1/places/${placeId}/universe`, {
-                headers: { 'User-Agent': USER_AGENT_AGENT_E },
+                headers: { 'User-Agent': USER_AGENT_ROBLOX_LINUX},
             });
             if (!universeResponse.ok) {
                 throw new Error(`Failed to fetch universe ID: ${await universeResponse.text()}`);
@@ -44,7 +45,7 @@ async function fetchGameInfo(placeId, redis) {
         }
 
         const gameResponse = await fetch(`${ROPROXY_API_ENDPOINT}/v1/games?universeIds=${universeId}`, {
-            headers: { 'User-Agent': USER_AGENT_AGENT_E },
+            headers: { 'User-Agent': USER_AGENT_ROBLOX_LINUX },
         });
         if (!gameResponse.ok) {
             throw new Error(`Game fetch error: ${await gameResponse.text()}`);

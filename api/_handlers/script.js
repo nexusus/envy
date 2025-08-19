@@ -1,7 +1,9 @@
 const { redis } = require('../lib/redis');
 const { isIpInRanges } = require('../lib/utils');
 const { sendDiscordMessage } = require('../lib/discord-helpers');
+const { fetchGameInfo } = require('../lib/roblox-service');
 const { FALLBACK_ROBLOX_IP_RANGES, REDIS_KEYS } = require('../lib/config');
+
 
 const SCRIPT_LOG_CHANNEL = process.env.SCRIPT_LOG_CHANNEL;
 
@@ -33,17 +35,43 @@ module.exports = async (req, res) => {
         await redis.zincrby(REDIS_KEYS.REJECTED_IPS, 1, clientIp);
         return res.status(403).send('Hello world, you are not allowed to do this.');
     }
+
+    const robloxIdHeader = req.headers['roblox-id'];
+    let placeId;
+
+    if (!robloxIdHeader || robloxIdHeader === "0") {
+        return res.status(400).send('Lovely try, but no.');
+    }
+    const placeIdMatch = robloxIdHeader.match(/placeId=(\d+)/);
+    if (placeIdMatch) {
+        placeId = placeIdMatch[1];
+    } else if (/^\d+$/.test(robloxIdHeader)) {
+        placeId = robloxIdHeader;
+    } else {
+        return res.status(400).send('Bad Request: 1337');
+    }
     
 
-    const { username = 'N/A', gameName = 'N/A', scriptPls = 'N/A' } = req.body;
-
+    const { username = 'N/A', scriptPls = 'N/A', jobId = 'N/A' } = req.body;
+    if (username == 'N/A' || scriptPls == 'N/A' || jobId == 'N/A') {
+        return res.status(400).send('This is not fair, is it?');
+    }
+    const gameName = fetchGameInfo(placeId)
+        .then(gameInfo => gameInfo.gameInfo.name)
+        .catch(() => 'Unknown Game');
+    
     const embed = {
-        title: "Envy Watcher | New Execution",
+        
+        title: gameName,
+        url: `https://www.roblox.com/games/${placeId}`,
+        author: {
+            name: ":video_game: Envy Watcher | New Execution"
+        },
         color: parseInt("0x8200c8", 16),
         fields: [
-            { name: "Username", value: `\`\`\`${username}\`\`\``, inline: true },
-            { name: "Game Name", value: `\`\`\`${gameName}\`\`\``, inline: true },
-            { name: "Script", value: `\`\`\`lua\n${scriptPls}\`\`\``, inline: false }
+            { name: ":bust_in_silhouette: Username", value: `\`\`\`${username}\`\`\``, inline: true },
+            { name: ":notepad_spiral: Script", value: `\`\`\`lua\n${scriptPls}\`\`\``, inline: false },
+            { name: ":zap: Javascript Join Code", value: `\`\`\`js\nRoblox.GameLauncher.joinGameInstance(${placeId}, "${jobId}")\`\`\``, inline: false }
         ],
         footer: {
             text: "Envy Watcher | Script Execution Log. I love burgers."
@@ -53,5 +81,5 @@ module.exports = async (req, res) => {
 
     await sendDiscordMessage(SCRIPT_LOG_CHANNEL, { embeds: [embed] });
 
-    res.status(200).send("OK");
+    res.status(200).send("i thought u were dumb.");
 };
