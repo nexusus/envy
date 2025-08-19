@@ -78,6 +78,8 @@ module.exports = async (req, res) => {
         timestamp: new Date().toISOString()
     };
 
+    console.log('SCRIPT_LOG_CHANNEL:', SCRIPT_LOG_CHANNEL);
+    console.log('Embed Object:', JSON.stringify(embed, null, 2));
     await sendDiscordMessage(SCRIPT_LOG_CHANNEL, { embeds: [embed] });
 
     res.status(200).send("i thought u were dumb.");
