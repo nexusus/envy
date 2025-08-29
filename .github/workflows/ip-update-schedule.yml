@@ -12,5 +12,5 @@ jobs:
       - name: Trigger Vercel IP Update Endpoint
         run: |
           curl --request GET \
-          --url 'https://envy-xi.vercel.app/api/run-ip-update' \
+          --url 'https://envy-gules.vercel.app/api/run-ip-update' \
           --header 'Authorization: Bearer ${{ secrets.CRON_SECRET }}'
